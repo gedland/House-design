@@ -41,5 +41,5 @@ const Provider = (() => {
     if (!r.ok) throw new Error(`tjenesten svarte ${r.status}`);
     return r.json();
   }
-  return { generate, demo: !ENDPOINT };
+  return { generate, load, demo: !ENDPOINT };
 })();

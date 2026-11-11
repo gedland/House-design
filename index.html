@@ -37,9 +37,16 @@
   <section id="work" aria-label="Bilde">
     <div id="stage"></div>
     <div id="history">
-      <button id="undo" type="button" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 3.5 9.5 8 14M4 9.5h10a6 6 0 0 1 0 12h-3"/></svg>Angre
-      </button>
+      <div id="tools">
+        <button id="undo" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 3.5 9.5 8 14M4 9.5h10a6 6 0 0 1 0 12h-3"/></svg>Angre
+        </button>
+        <button id="dl" type="button" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M4 19h16"/></svg>Last ned
+        </button>
+        <button id="dl2" type="button" disabled>Last ned før/etter</button>
+        <label>Sammenlign med <select id="cmp" disabled></select></label>
+      </div>
       <ol id="versions" aria-label="Versjoner"></ol>
     </div>
   </section>
@@ -51,8 +58,9 @@
         <legend>Hva skal endres?</legend>
         <div id="elements" class="chips"></div>
       </fieldset>
-      <label for="wish">Til hva?</label>
+      <div class="row"><label for="wish">Til hva?</label><button id="keep" type="button">Lagre ønske</button></div>
       <textarea id="wish" rows="3" maxlength="400" placeholder="f.eks. mørk eikedør med smalt glassfelt"></textarea>
+      <div id="wishes" class="chips" aria-label="Lagrede ønsker"></div>
       <h3>Prompt</h3>
       <pre id="prompt-edit" class="prompt"></pre>
       <button class="primary" type="submit">Lag ny versjon</button>
