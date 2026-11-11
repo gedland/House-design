@@ -11,3 +11,9 @@
 - Uten nøkkel, eller uten server, kjører appen i demomodus med plassholderbilder.
 - Bilder og versjoner lagres i nettleseren (IndexedDB). «Slett alt» tømmer lageret.
 - Kallet mot Higgsfield er skrevet etter API-et slik det er dokumentert, men er ikke kjørt mot ekte tjeneste (ingen nøkkel her). Feil derfra vises i statusfeltet.
+
+## Video (Seedance 2.5)
+
+1. `npm install`
+2. Lag `.env.local` i prosjektmappen med én linje: `HF_CREDENTIALS=<nøkkel-id>:<hemmelighet>` (filen er ignorert av Git).
+3. `npm run video` lager en 5 sekunders 720p-video (16:9) og skriver ut video-URL-en. Dette koster kreditter.
