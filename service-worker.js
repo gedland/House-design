@@ -1,5 +1,5 @@
 // Cacher appen så den virker uten nett. Øk VERSION når filene endres.
-const VERSION = 'husdesign-v1';
+const VERSION = 'husdesign-v2';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'provider.js', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(
