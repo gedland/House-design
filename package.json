@@ -1,0 +1,11 @@
+{
+  "name": "husform",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "video": "node --env-file-if-exists=.env.local index.ts"
+  },
+  "dependencies": {
+    "@higgsfield/client": "^0.2.6"
+  }
+}
