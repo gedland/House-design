@@ -17,7 +17,7 @@
     <button role="tab" id="tab-edit" aria-controls="panel-edit" aria-selected="true">Endre hus</button>
     <button role="tab" id="tab-create" aria-controls="panel-create" aria-selected="false">Lag nytt hus</button>
   </nav>
-  <span id="demo" hidden title="Ingen endepunkt er satt i provider.js. Bildene er plassholdere.">Demomodus</span>
+  <span id="demo" hidden></span>
   <button id="theme" class="icon" type="button">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path class="moon" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/><g class="sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
   </button>
@@ -32,9 +32,17 @@
       <span>eller velg filer. Ute, inne og tomt.</span>
     </label>
     <ul id="list"></ul>
+    <button id="wipe" type="button">Slett alt</button>
   </aside>
 
   <section id="work" aria-label="Bilde">
+    <div id="tools" role="toolbar" aria-label="Markering">
+      <button type="button" data-tool="brush">Pensel</button>
+      <button type="button" data-tool="erase">Viskelær</button>
+      <label>Størrelse <input id="size" type="range" min="1" max="15" value="5"></label>
+      <button id="clear" type="button">Tøm markering</button>
+      <span class="hint">Mal over området som skal endres.</span>
+    </div>
     <div id="stage"></div>
     <div id="history">
       <button id="undo" type="button" disabled>
@@ -53,6 +61,8 @@
       </fieldset>
       <label for="wish">Til hva?</label>
       <textarea id="wish" rows="3" maxlength="400" placeholder="f.eks. mørk eikedør med smalt glassfelt"></textarea>
+      <label for="color">Farge i forhåndsvisningen</label>
+      <input id="color" type="color" value="#5a3b26">
       <h3>Prompt</h3>
       <pre id="prompt-edit" class="prompt"></pre>
       <button class="primary" type="submit">Lag ny versjon</button>
@@ -69,6 +79,7 @@
       <pre id="prompt-create" class="prompt"></pre>
       <button class="primary" type="submit">Lag hus</button>
     </form>
+    <p id="mode" class="hint"></p>
     <p id="status" role="status"></p>
   </aside>
 </main>
