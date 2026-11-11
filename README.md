@@ -1,19 +1,12 @@
-# Husform
+# Husdesign
+Endre huset ditt med tekst, eller lag et nytt. PWA uten byggesteg: virker helt uten server (gratis demomodus) og uten nett etter første besøk.
 
-1. Skaff en API-nøkkel hos Higgsfield (cloud.higgsfield.ai → API Keys). Du får en nøkkel-ID og en hemmelighet.
-2. Start med nøkkelen i miljøvariabelen: `IMAGE_API_KEY="<nøkkel-id>:<hemmelighet>" node server.js`
-3. Åpne http://localhost:3000. Nøkkelen ligger bare i miljøet på serveren, aldri i nettleseren eller repoet.
-
-## Merknader
-
-- Modell: Seedream 4 (`bytedance/seedream/v4/edit`) med bildereferanse, som beholder form og vinkel. Bytt med `IMAGE_MODEL_EDIT` og `IMAGE_MODEL_CREATE`. Port: `PORT`.
-- Maskering: modellen har ikke maskeinngang. Appen sender derfor originalen pluss en kopi der området er markert i rødt, og ber i prompten om endring bare der. Etterpå limes resultatet inn i originalen kun innenfor markeringen, så resten av bildet er garantert urørt. Masken sendes også som `mask` i forespørselen, klar for en modell som støtter den.
-- Uten nøkkel, eller uten server, kjører appen i demomodus med plassholderbilder.
-- Bilder og versjoner lagres i nettleseren (IndexedDB). «Slett alt» tømmer lageret.
-- Kallet mot Higgsfield er skrevet etter API-et slik det er dokumentert, men er ikke kjørt mot ekte tjeneste (ingen nøkkel her). Feil derfra vises i statusfeltet.
-
-## Video (Seedance 2.5)
-
-1. `npm install`
-2. Lag `.env.local` i prosjektmappen med én linje: `HF_CREDENTIALS=<nøkkel-id>:<hemmelighet>` (filen er ignorert av Git).
-3. `npm run video` lager en 5 sekunders 720p-video (16:9) og skriver ut video-URL-en. Dette koster kreditter.
+**Gratis (standard):** demomodus. Marker et område med penselen, velg element og farge; resultatet er en forhåndsvisning laget i nettleseren, ikke AI. Bilder og versjoner lagres lokalt i nettleseren (IndexedDB); «Slett alt» fjerner dem.
+**Nettsted (Netlify Drop eller GitHub Pages):** last opp mappen som den er. Alle stier er relative. På iPhone: Safari → Del → «Legg til på Hjem-skjerm».
+**Lokalt:** `node server.js` (Node 18+, ingen pakker) og åpne http://localhost:3000.
+**Ekte AI (valgfritt, krever `node server.js`):** lag `.env` med `IMAGE_PROVIDER=gemini` eller `openai` og `IMAGE_API_KEY=...` (valgfritt `IMAGE_MODEL`, `PORT`).
+- gemini: nøkkel fra Google AI Studio. Standardmodell `gemini-2.5-flash-image`; masken sendes som ekstra bilde med tekstinstruks.
+- openai: nøkkel fra OpenAI med betalingsmåte. Standardmodell `gpt-image-1`; masken sendes som ekte maske.
+**Advarsel:** ekte generering koster penger per bilde. Gratiskvoter varierer, endres ofte og dekker ikke alltid bildemodeller. Sjekk prisene hos leverandøren først.
+Feiler AI-kallet (f.eks. kvote brukt opp), viser appen en forhåndsvisning og en feilmelding.
+Ved endringer i filene: øk `VERSION` i `service-worker.js`.
