@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Husdesign</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <h1>Husdesign</h1>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="edit" role="tab">Endre hus</button>
+    <button class="tab" data-tab="generate" role="tab">Lag nytt hus</button>
+  </nav>
+  <button id="settingsBtn" class="ghost">Innstillinger</button>
+</header>
+
+<main class="layout">
+  <aside class="panel left">
+    <h2>Bilder</h2>
+    <label class="drop" id="drop">
+      <input id="file" type="file" accept="image/*" multiple hidden>
+      <span>Slipp bilder her eller klikk for å velge</span>
+      <small>Inne, ute og tomt</small>
+    </label>
+    <div id="thumbs" class="thumbs"></div>
+  </aside>
+
+  <section class="stage">
+    <div id="empty" class="empty">Last opp et bilde av huset for å komme i gang.</div>
+    <div id="compare" class="compare" hidden>
+      <img id="imgAfter" alt="Etter">
+      <div class="before-wrap" id="beforeWrap"><img id="imgBefore" alt="Før"></div>
+      <input id="slider" type="range" min="0" max="100" value="50" aria-label="Før og etter">
+      <span class="tag l">Før</span><span class="tag r">Etter</span>
+    </div>
+    <div id="busy" class="busy" hidden>Genererer …</div>
+    <div id="versions" class="versions"></div>
+  </section>
+
+  <aside class="panel right">
+    <div id="editPane">
+      <h2>Endre</h2>
+      <label>Hva vil du endre?
+        <select id="element">
+          <option>Ytterdør</option><option>Fasade / yttervegger</option><option>Tak</option>
+          <option>Vinduer</option><option>Innervegger</option><option>Gulv</option>
+          <option>Kjøkken</option><option>Bad</option><option>Hage / tomt</option>
+          <option>Innkjørsel</option><option>Hele huset</option>
+        </select>
+      </label>
+      <label>Til hva?
+        <input id="to" type="text" placeholder="f.eks. mørk eik med smale glassfelt">
+      </label>
+      <div class="chips" id="chips"></div>
+      <label class="check"><input id="keep" type="checkbox" checked> Behold form, vinkel og lys</label>
+      <label>Tilleggsønsker
+        <textarea id="extra" rows="2" placeholder="Valgfritt"></textarea>
+      </label>
+      <button id="apply" class="primary">Bruk endring</button>
+      <button id="undo" class="ghost">Angre</button>
+      <details><summary>Prompt som sendes</summary><pre id="promptPreview"></pre></details>
+    </div>
+
+    <div id="genPane" hidden>
+      <h2>Lag nytt hus</h2>
+      <p class="hint">Bruk bildene til venstre som inspirasjon eller referanse.</p>
+      <label>Stil
+        <input id="style" type="text" placeholder="f.eks. skandinavisk, minimalistisk, lyst">
+      </label>
+      <label>Beskrivelse
+        <textarea id="desc" rows="4" placeholder="f.eks. toetasjes enebolig med flatt tak og store vinduer, på en skrånende tomt"></textarea>
+      </label>
+      <label>Vis
+        <select id="view"><option>Utsiden</option><option>Stue</option><option>Kjøkken</option><option>Bad</option><option>Soverom</option></select>
+      </label>
+      <button id="generate" class="primary">Generer</button>
+    </div>
+  </aside>
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>Innstillinger</h2>
+    <label>Bilde-API (endepunkt)
+      <input id="endpoint" type="url" placeholder="https://din-server/api/image">
+    </label>
+    <p class="hint">Uten endepunkt kjører appen i demomodus, der endringene bare simuleres. API-nøkler skal ligge på serveren din, aldri her.</p>
+    <menu><button value="cancel" class="ghost">Lukk</button><button id="saveSettings" value="ok" class="primary">Lagre</button></menu>
+  </form>
+</dialog>
+
+<script src="provider.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
