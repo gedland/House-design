@@ -63,6 +63,13 @@
 <aside id="panel" aria-label="Panel"></aside>
 <div id="fatal" role="alert" hidden><p></p><button type="button" onclick="location.reload()">Last på nytt</button></div>
 <script type="module" src="js/app.js"></script>
-<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
+<script>
+if ('serviceWorker' in navigator) {
+  // Når en ny versjon tar over, lastes siden én gang på nytt så alle filene kommer fra samme versjon.
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !sessionStorage.swReload) { sessionStorage.swReload = 1; location.reload(); } });
+  navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });
+}
+</script>
 </body>
 </html>
