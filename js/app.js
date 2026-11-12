@@ -7,7 +7,7 @@ const btn = (textContent, onclick, p = {}) => h('button', { type: 'button', text
 const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
-const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], ai: false, busy: false, note: '' };
+const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, note: '' };
 let view;
 try { view = createView($('#view')); }
 catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
@@ -142,35 +142,183 @@ function addSheet() {
     h('div', { className: 'tiles' }, Object.entries(FURNITURE).map(([type, f]) => tile(f.label, () => addFurniture(type))))];
 }
 
-// Bilder inn → 3D-modell. Bildene krympes i nettleseren og sendes til serveren, som spør Claude.
-async function shrink(file) {
-  const bmp = await createImageBitmap(file), k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
-  const c = h('canvas', { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close?.();
-  return c.toDataURL('image/jpeg', .8);
+// Bilder inn → 3D-modell. Bildene krympes i nettleseren (lang side 1280 px, JPEG) og sendes til serveren, som spør Claude.
+// S.photos: [{ key, name, data, thumb }]. S.prep: krymping pågår { done, total }. S.job: tolkning pågår { stage, part, chars, t0, xhr }.
+// S.server: 'ok' | 'nokey' | 'none' (ingen Husform-server svarte) | null (ikke sjekket ennå).
+const MIN = 5, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
+async function decode(file) {
+  try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch { // eldre nettlesere og formater createImageBitmap ikke tar: prøv vanlig <img>
+    const url = URL.createObjectURL(file), img = new Image(); img.src = url;
+    try { await img.decode(); return img; } finally { URL.revokeObjectURL(url); }
+  }
 }
+function jpeg(src, side, q) {
+  const W = src.naturalWidth || src.width, H = src.naturalHeight || src.height, k = Math.min(1, side / Math.max(W, H));
+  const c = h('canvas', { width: Math.max(1, Math.round(W * k)), height: Math.max(1, Math.round(H * k)) }), g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, c.width, c.height);
+  const url = c.toDataURL('image/jpeg', q); c.width = c.height = 0; return url;
+}
+async function shrink(file) {
+  const src = await decode(file);
+  try {
+    let data = jpeg(src, SIDE, .82);
+    if (data.length > MAX_DATA) data = jpeg(src, SIDE, .6);
+    if (data.length > MAX_DATA) data = jpeg(src, 1024, .6);
+    return { data, thumb: jpeg(src, THUMB, .7) };
+  } finally { src.close?.(); }
+}
+const names = (list, max = 3) => list.slice(0, max).map(n => Array.isArray(n) ? `«${n[0]}» (${n[1]})` : `«${n}»`).join(', ') + (list.length > max ? ` og ${list.length - max} til` : '');
 async function addPhotos(files) {
-  for (const f of files) { if (S.photos.length >= 30) break; try { S.photos.push(await shrink(f)); } catch { S.note = 'Noen av filene kunne ikke leses som bilder.'; } }
+  const bad = { type: [], big: [], read: [] }; let dup = 0, over = 0; const todo = [];
+  for (const f of files) {
+    const key = `${f.name}|${f.size}|${f.lastModified}`;
+    if (S.photos.some(p => p.key === key) || todo.some(t => t.key === key)) dup++;
+    else if (!f.type.startsWith('image/') && !/\.(jpe?g|png|webp|gif|heic|heif|avif)$/i.test(f.name)) bad.type.push(f.name);
+    else if (f.size > MAX_MB * 1e6) bad.big.push([f.name, `${Math.round(f.size / 1e6)} MB`]);
+    else if (S.photos.length + todo.length >= MAX) over++;
+    else todo.push({ f, key });
+  }
+  S.note = ''; S.prep = todo.length ? { done: 0, total: todo.length } : null; ui();
+  for (const { f, key } of todo) {
+    try { S.photos.push({ key, name: f.name, ...await shrink(f) }); }
+    catch { bad.read.push(f.name); }
+    S.prep.done++; ui();
+  }
+  S.prep = null;
+  const heic = bad.read.some(n => /\.hei[cf]$/i.test(n));
+  S.note = [
+    bad.type.length && `${names(bad.type)} er ikke ${bad.type.length > 1 ? 'bilder' : 'et bilde'} og ble hoppet over.`,
+    bad.big.length && `${names(bad.big)} er for ${bad.big.length > 1 ? 'store' : 'stor'}. Hvert bilde kan være høyst ${MAX_MB} MB.`,
+    bad.read.length && `${names(bad.read)} kunne ikke leses som ${bad.read.length > 1 ? 'bilder' : 'bilde'}.${heic ? ' HEIC-bilder fra iPhone kan bare leses i Safari. Velg dem fra iPhonen, eller lagre dem som JPEG.' : ''}`,
+    over && `Du kan bruke høyst ${MAX} bilder, så ${over} ${over > 1 ? 'bilder' : 'bilde'} ble ikke lagt til.`,
+    dup && `${dup > 1 ? `${dup} bilder` : 'Ett bilde'} var valgt fra før.`,
+  ].filter(Boolean).join(' ');
   ui();
 }
-async function analyze() {
-  S.busy = true; say('Claude leser bildene og bygger modellen. Det kan ta et par minutter.');
+function removePhoto(i) { S.photos.splice(i, 1); S.note = ''; ui(); }
+async function checkServer() {
   try {
-    const r = await fetch('api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images: S.photos }) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || `Serveren svarte med feil ${r.status}.`);
-    S.busy = false; S.note = ''; S.photos = []; replace(normalize(j.house));
-  } catch (e) { S.busy = false; say(e instanceof TypeError ? 'Fikk ikke kontakt med serveren.' : e.message); }
+    const r = await fetch('api/status', { cache: 'no-store' }), j = await r.json();
+    S.server = j.ai ? 'ok' : 'nokey';
+  } catch { S.server = 'none'; }
+  if (S.sheet === 'photos') ui();
 }
+
+// Fremdrift: sending (0–15 %), Claude ser på bildene (15–55 %, etter tid), Claude skriver modellen (55–97 %, etter mengde tekst).
+const STAGES = {
+  send: 'Sender bildene til serveren', wait: 'Venter på Claude', look: 'Claude ser på bildene og finner ut hvordan huset henger sammen',
+  write: 'Claude skriver ned modellen', draw: 'Tegner modellen',
+};
+const ease = (x, k) => 1 - Math.exp(-x / k);
+function jobState() {
+  const j = S.job, secs = (Date.now() - j.t0) / 1000;
+  const pct = j.stage === 'send' ? 15 * j.part : j.stage === 'wait' ? 15 : j.stage === 'look' ? 15 + 40 * ease(secs - j.t1, 90)
+    : j.stage === 'write' ? 55 + 42 * ease(j.chars, 20000) : 99;
+  const time = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+  const extra = j.stage === 'send' ? `${Math.round(j.part * 100)} %` : j.stage === 'write' && j.chars >= 1000 ? `${Math.round(j.chars / 1000)} kB` : '';
+  return { pct, text: `${STAGES[j.stage]} …${extra ? ` ${extra}` : ''}`, time };
+}
+// Oppdaterer fremdriften der den vises (arket eller banneret), uten å tegne resten av grensesnittet på nytt.
+function showJob() {
+  if (!S.job) return;
+  const { pct, text, time } = jobState();
+  for (const el of document.querySelectorAll('.job')) {
+    el.querySelector('.bar i').style.width = `${pct.toFixed(1)}%`;
+    el.querySelector('.bar').ariaValueNow = Math.round(pct);
+    el.querySelector('.job-text').textContent = text;
+    const t = el.querySelector('.job-time'); if (t) t.textContent = `Tid brukt: ${time}. Det tar vanligvis 1–4 minutter.`;
+  }
+}
+const jobView = (small) => h('div', { className: 'job' + (small ? ' small' : '') },
+  h('p', { className: 'job-text', role: 'status' }),
+  h('div', { className: 'bar', role: 'progressbar', ariaLabel: 'Fremdrift', ariaValueMin: 0, ariaValueMax: 100 }, h('i')),
+  !small && h('p', { className: 'job-time hint' }));
+
+const failed = msg => Object.assign(new Error(msg), { shown: true });
+function httpError(status, j) {
+  if (j?.error) return failed(j.error);
+  if (status === 404 || status === 405) return failed('Fant ikke bildetolkningen på serveren. Appen ser ut til å kjøre uten Husform-serveren (f.eks. som statiske filer). Start den med node server.js.');
+  if (status === 413) return failed('Bildene er for store til sammen. Bruk færre bilder.');
+  if (status >= 502 && status <= 504) return failed(`Serveren svarte ikke (feil ${status}). Sjekk at node server.js kjører, og prøv igjen.`);
+  return failed(`Serveren svarte med feil ${status}. Prøv igjen.`);
+}
+// Sender bildene med XMLHttpRequest, som gir fremdrift både for opplastingen og for svaret serveren strømmer tilbake.
+function post(images) {
+  return new Promise((ok, no) => {
+    const x = new XMLHttpRequest(); S.job.xhr = x;
+    let seen = 0, house = null, error = null;
+    const stage = (st, o = {}) => { if (st === 'look' && S.job.stage !== 'look') S.job.t1 = (Date.now() - S.job.t0) / 1000; Object.assign(S.job, { stage: st }, o); showJob(); };
+    const read = () => {
+      if (!x.getResponseHeader('Content-Type')?.includes('ndjson')) return;
+      const t = x.responseText; let i;
+      while ((i = t.indexOf('\n', seen)) >= 0) {
+        let m; try { m = JSON.parse(t.slice(seen, i)); } catch { m = null; } seen = i + 1;
+        if (m?.type === 'progress') stage(m.stage, m.chars != null ? { chars: m.chars } : {});
+        else if (m?.type === 'done') house = m.house;
+        else if (m?.type === 'error') error = m.error;
+      }
+    };
+    x.open('POST', 'api/analyze'); x.setRequestHeader('Content-Type', 'application/json'); x.timeout = 15 * 60e3;
+    x.upload.onprogress = e => e.lengthComputable && stage('send', { part: e.loaded / e.total });
+    x.upload.onload = () => stage('wait');
+    x.onprogress = read;
+    x.onload = () => {
+      if (x.status !== 200) { let j = null; try { j = JSON.parse(x.responseText); } catch {} return no(httpError(x.status, j)); }
+      read();
+      if (!x.getResponseHeader('Content-Type')?.includes('ndjson')) { try { house = JSON.parse(x.responseText).house; } catch {} }
+      if (error) no(failed(error)); else if (house) ok(house);
+      else no(failed('Svaret fra serveren stoppet før modellen var ferdig. Prøv igjen.'));
+    };
+    x.onerror = () => no(failed(navigator.onLine === false ? 'Mobilen er uten nett. Koble til og prøv igjen.'
+      : 'Mistet kontakten med serveren. Sjekk at node server.js kjører og at du er på nett. Hold skjermen på og appen åpen mens tolkningen pågår, og prøv igjen.'));
+    x.ontimeout = () => no(failed('Serveren brukte mer enn 15 minutter. Prøv igjen, gjerne med færre bilder.'));
+    x.onabort = () => no(Object.assign(new Error('Avbrutt.'), { aborted: true }));
+    x.send(JSON.stringify({ images }));
+  });
+}
+async function analyze() {
+  if (S.job || S.photos.length < MIN) return;
+  S.job = { stage: 'send', part: 0, chars: 0, t0: Date.now(), t1: 0 }; S.note = ''; ui(); showJob(); $('#panel').scrollTop = 0;
+  const timer = setInterval(showJob, 1000);
+  const lock = await navigator.wakeLock?.request('screen').catch(() => null); // hindrer at mobilen sovner og bryter forbindelsen
+  try {
+    const raw = await post(S.photos.map(p => p.data));
+    S.job.stage = 'draw'; showJob();
+    let house;
+    try { house = normalize(raw); } catch (e) { throw failed(`Claude svarte, men modellen kunne ikke brukes: ${e.message} Prøv igjen.`); }
+    S.photos = []; S.job = null; replace(house);
+    say('Modellen er klar. Målene er anslag – trykk på en del for å rette den.');
+  } catch (e) {
+    S.job = null;
+    if (!e.shown && !e.aborted) console.error(e);
+    say(e.aborted ? 'Tolkningen ble avbrutt. Bildene er fortsatt valgt.' : e.shown ? e.message : `Noe gikk galt: ${e.message}`);
+  } finally { clearInterval(timer); lock?.release().catch(() => {}); }
+}
+function cancelJob() { S.job?.xhr?.abort(); }
 function photoSheet() {
-  const n = S.photos.length, file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: e => addPhotos([...e.target.files]) });
+  const n = S.photos.length, busy = !!S.job, prep = S.prep;
+  const file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: e => { const f = [...e.target.files]; e.target.value = ''; addPhotos(f); } });
+  const intro = { ok: `Velg ${MIN}–${MAX} bilder av ett hus, både ute og inne: alle sider av huset utenfra, og hvert rom innenfra. Jo flere vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.`,
+    nokey: 'Serveren har ingen API-nøkkel for Claude, så bildene kan ikke tolkes. Den som driver serveren, må legge ANTHROPIC_API_KEY=... i filen .env og starte node server.js på nytt. Imens kan du prøve appen med demohuset.',
+    none: 'Fant ingen Husform-server å sende bildene til. Bildetolkning krever at appen kjøres med node server.js (ikke som statiske filer) og at du er på nett. Imens kan du prøve appen med demohuset.' }[S.server] || 'Sjekker serveren …';
+  const ok = S.server === 'ok';
+  const status = ok && [
+    h('div', { className: 'count' },
+      h('strong', { textContent: `${n} av ${MAX} bilder valgt` }),
+      h('span', { textContent: prep ? `Krymper bilde ${Math.min(prep.done + 1, prep.total)} av ${prep.total} …` : n < MIN ? `Velg minst ${MIN - n} til` : '' })),
+    S.note && h('p', { className: 'note', role: 'status', textContent: S.note })];
+  const grid = ok && h('ul', { className: 'photos', ariaLabel: 'Valgte bilder' },
+    S.photos.map((p, i) => h('li', {}, h('img', { src: p.thumb, alt: p.name }),
+      btn('✕', () => removePhoto(i), { className: 'del', ariaLabel: `Fjern ${p.name}`, disabled: busy }))),
+    n + (prep ? prep.total - prep.done : 0) < MAX && !busy && h('li', {}, file, btn(prep ? '…' : '+ Legg til', () => file.click(), { className: 'pick', disabled: !!prep })));
+  const go = ok && !busy && btn(n < MIN ? `Velg minst ${MIN} bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: n < MIN || !!prep });
+  // Mens tolkningen pågår, står fremdriften øverst så den synes uten å rulle.
   return [head('Nytt hus', 'Fra bilder til 3D', () => sheet(null)),
-    h('p', { className: 'hint', textContent: S.ai ? 'Velg 5–30 bilder av ett hus, både ute og inne. Jo flere rom og vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.'
-      : 'Serveren har ingen API-nøkkel, så bildene kan ikke tolkes her. Du kan åpne demohuset i stedet. Sett ANTHROPIC_API_KEY i .env og start node server.js for å bruke egne bilder.' }),
-    S.ai && h('div', { className: 'photos' }, S.photos.map((src, i) => h('button', { type: 'button', ariaLabel: `Fjern bilde ${i + 1}`, disabled: S.busy, onclick: () => { S.photos.splice(i, 1); ui(); } }, h('img', { src, alt: '' }))),
-      n < 30 && h('label', { className: 'pick' }, file, '+ Bilder')),
-    S.ai ? btn(S.busy ? 'Arbeider …' : n < 5 ? `Velg minst 5 bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: S.busy || n < 5 })
-      : btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })];
+    busy ? [jobView(false), btn('Avbryt', cancelJob, { className: 'secondary' })] : h('p', { className: 'hint', textContent: intro }),
+    status, grid, go,
+    S.server === 'none' && btn('Prøv å nå serveren igjen', () => { S.server = null; ui(); checkServer(); }, { className: 'secondary' }),
+    !ok && S.server && btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })].flat();
 }
 
 // Eksport og import
@@ -229,10 +377,13 @@ function keyMove() { const k = (...c) => c.some(x => keys.has(x)) ? 1 : 0; stick
 function ui() {
   const el = $('#panel'), f = S.sel && find(S.house, S.sel);
   const content = f ? selectionPanel(f) : S.sheet === 'add' ? addSheet() : S.sheet === 'photos' ? photoSheet() : S.sheet === 'more' ? moreSheet() : null;
-  const banner = S.placing ? `Trykk på veggen der ${S.placing === 'door' ? 'døren' : 'vinduet'} skal stå.` : !content && S.note;
+  const job = S.job && S.sheet !== 'photos';
+  const banner = S.placing ? `Trykk på veggen der ${S.placing === 'door' ? 'døren' : 'vinduet'} skal stå.` : !content && (job || S.note);
   document.body.className = [content && 'has-panel', f && S.move && 'moving', S.walk && 'walk', (S.placing || banner) && 'has-banner', localStorage.tipSeen && 'seen'].filter(Boolean).join(' ');
-  el.replaceChildren(...(content || []).filter(Boolean), ...(content && S.note ? [h('p', { className: 'note', role: 'status', textContent: S.note })] : []));
-  $('#banner').replaceChildren(...(banner ? [h('span', { textContent: S.placing ? (S.note || banner) : banner }), btn(S.placing ? 'Avbryt' : 'OK', () => { S.placing = null; say(''); })] : []));
+  el.replaceChildren(...(content || []).filter(Boolean), ...(content && S.note && S.sheet !== 'photos' ? [h('p', { className: 'note', role: 'status', textContent: S.note })] : []));
+  $('#banner').replaceChildren(...(!banner ? [] : job && !S.placing ? [jobView(true), btn('Vis', () => sheet('photos'))]
+    : [h('span', { textContent: S.placing ? (S.note || banner) : banner }), btn(S.placing ? 'Avbryt' : 'OK', () => { S.placing = null; say(''); })]));
+  showJob();
   const fl = S.house.floors, chip = (label, on, fn) => btn(label, fn, { ariaPressed: String(on) });
   $('#floors').replaceChildren(...(S.walk
     ? [btn('Ut av huset', leave, { className: 'out' }), fl.length > 1 && btn('Opp', () => climb(1), { disabled: !fl[S.walk.floor + 1] }), fl.length > 1 && btn('Ned', () => climb(-1), { disabled: !S.walk.floor })]
@@ -283,7 +434,7 @@ $('#undo').onclick = () => {
   if (S.floor !== null && !S.house.floors[S.floor]) S.floor = null;
   select(S.sel); save();
 };
-$('#b-photos').onclick = () => sheet('photos'); $('#b-add').onclick = () => sheet('add'); $('#b-more').onclick = () => sheet('more'); $('#b-walk').onclick = enter;
+$('#b-photos').onclick = () => { sheet('photos'); checkServer(); }; $('#b-add').onclick = () => sheet('add'); $('#b-more').onclick = () => sheet('more'); $('#b-walk').onclick = enter;
 addEventListener('keydown', e => {
   if (e.target.matches('input, select, textarea')) return;
   const k = e.key.toLowerCase();
@@ -297,7 +448,7 @@ addEventListener('blur', () => { keys.clear(); if (S.walk) stick(0, 0); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { document.documentElement.dataset.theme = e.matches ? 'dark' : 'light'; view.theme(); });
 matchMedia('(min-width: 760px)').addEventListener('change', ui);
 
-fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; if (S.sheet === 'photos') ui(); }).catch(() => {});
+checkServer();
 db('readonly', s => s.get('house')).then(saved => {
   try { if (saved?.version === 1) S.house = normalize(saved); } catch {}
   view.build(S.house, { floor: null }); view.frame(); ui(); window.husformReady = true;

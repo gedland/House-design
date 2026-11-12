@@ -48,31 +48,45 @@ Mål: bruk kjente størrelser som målestokk. En dør er ca. 0.9 × 2.1, en kjø
 Farger er hex-koder lest av bildene. Romnavn og husets navn skal være på norsk.`;
 
 let client;
-async function analyze(images) {
+// Bilder → hus-JSON. on(progress) kalles underveis: { stage: 'look' } når Claude har begynt, { stage: 'write', chars } mens modellen skrives.
+// signal avbryter kallet (og kostnaden) når nettleseren går.
+async function analyze(images, on, signal) {
   let Anthropic;
   try { Anthropic = require('@anthropic-ai/sdk'); } catch { throw fail(500, 'Pakken @anthropic-ai/sdk mangler på serveren. Kjør npm install.'); }
   client ??= new Anthropic({ apiKey: KEY });
-  const content = images.map(u => {
+  const content = images.map((u, i) => {
     const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(u || '');
-    if (!m) throw fail(400, 'Ugyldig bilde i forespørselen.');
+    if (!m) throw fail(400, `Bilde ${i + 1} er ikke et gyldig bilde.`);
+    if (m[2].length * .75 > 5e6) throw fail(413, `Bilde ${i + 1} er for stort (over 5 MB). Last siden på nytt og velg bildene igjen, så krympes de.`);
     return { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } };
   });
   content.push({ type: 'text', text: `Dette er ${images.length} bilder av huset. Lag modellen.` });
   let msg;
   try {
     // Strømmes fordi svaret kan bli langt. Avviser modellen forespørselen, prøver API-et selv en reservemodell (fallbacks).
-    msg = await client.beta.messages.stream({
+    const stream = client.beta.messages.stream({
       model: MODEL, max_tokens: 32000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
       thinking: { type: 'adaptive' }, output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
       system: PROMPT, messages: [{ role: 'user', content }],
-    }).finalMessage();
+    });
+    if (signal.aborted) stream.abort(); else signal.addEventListener('abort', () => stream.abort(), { once: true });
+    let chars = 0;
+    stream.on('streamEvent', ev => {
+      if (ev.type === 'message_start') on({ stage: 'look' });
+      else if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') on({ stage: 'write', chars: chars += ev.delta.text.length });
+    });
+    msg = await stream.finalMessage();
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw fail(401, 'API-nøkkelen ble avvist. Sjekk ANTHROPIC_API_KEY på serveren.');
-    if (e instanceof Anthropic.RateLimitError) throw fail(429, 'For mange forespørsler eller brukt opp kvote hos Anthropic. Vent litt og prøv igjen.');
-    if (e instanceof Anthropic.NotFoundError) throw fail(502, `Modellen «${MODEL}» finnes ikke. Sjekk CLAUDE_MODEL.`);
-    if (e instanceof Anthropic.BadRequestError) throw fail(400, `Forespørselen ble avvist av Claude API: ${e.message}`);
-    if (e instanceof Anthropic.APIConnectionError) throw fail(502, 'Serveren fikk ikke kontakt med Claude API. Prøv igjen.');
+    if (signal.aborted) throw fail(499, 'Avbrutt.');
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw fail(401, 'API-nøkkelen ble avvist av Anthropic. Sjekk ANTHROPIC_API_KEY i .env på serveren.');
+    if (e instanceof Anthropic.RateLimitError) throw fail(429, 'For mange forespørsler, eller kvoten hos Anthropic er brukt opp. Vent litt og prøv igjen.');
+    if (e instanceof Anthropic.NotFoundError) throw fail(502, `Modellen «${MODEL}» finnes ikke. Sjekk CLAUDE_MODEL i .env.`);
+    if (e instanceof Anthropic.BadRequestError) throw fail(400, `Claude API avviste forespørselen: ${e.message}`);
+    if (e instanceof Anthropic.APIConnectionError) throw fail(502, 'Serveren fikk ikke kontakt med Claude API. Sjekk nettforbindelsen til serveren og prøv igjen.');
+    if (e instanceof Anthropic.APIError && e.status === 413) throw fail(413, 'Bildene er for store til sammen for Claude API. Bruk færre bilder.');
+    if (e instanceof Anthropic.APIError && e.status === 529) throw fail(503, 'Claude er overbelastet akkurat nå. Prøv igjen om noen minutter.');
     if (e instanceof Anthropic.APIError) throw fail(502, `Claude API svarte med feil ${e.status ?? ''}. Prøv igjen om litt.`);
+    if (e instanceof Anthropic.AnthropicError) { console.error(e); throw fail(502, 'Forbindelsen mellom serveren og Claude API ble brutt underveis. Prøv igjen.'); }
     throw e;
   }
   if (msg.stop_reason === 'refusal') throw fail(422, 'Claude ville ikke tolke disse bildene. Prøv med andre bilder av huset.');
@@ -84,25 +98,53 @@ async function analyze(images) {
 const TYPES = { html: 'text/html', css: 'text/css', js: 'text/javascript', json: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png' };
 const FILES = ['index.html', 'style.css', 'js/app.js', 'js/scene.js', 'js/house.js', 'manifest.json', 'service-worker.js', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const send = (res, status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+// Leser hele forespørselen. Er den for stor, leses resten uten å lagres, slik at nettleseren faktisk får 413-svaret.
+const LIMIT = 30e6, TOO_BIG = 'Bildene er for store til sammen. Bruk færre bilder.';
 const readBody = req => new Promise((ok, no) => {
+  if (+req.headers['content-length'] > LIMIT) { req.resume(); return req.on('end', () => no(fail(413, TOO_BIG))); }
   const chunks = []; let n = 0;
-  req.on('data', c => { if ((n += c.length) > 30e6) { no(fail(413, 'Bildene er for store til sammen. Bruk færre bilder.')); req.destroy(); } else chunks.push(c); });
-  req.on('end', () => { try { ok(JSON.parse(Buffer.concat(chunks).toString())); } catch { no(fail(400, 'Ugyldig forespørsel.')); } });
+  req.on('data', c => { if ((n += c.length) <= LIMIT) chunks.push(c); });
+  req.on('end', () => {
+    if (n > LIMIT) return no(fail(413, TOO_BIG));
+    try { ok(JSON.parse(Buffer.concat(chunks).toString())); } catch { no(fail(400, 'Ugyldig forespørsel.')); }
+  });
   req.on('error', no);
+  req.on('close', () => { if (!req.complete) no(fail(499, 'Avbrutt.')); });
 });
+// POST /api/analyze. Feil før Claude har begynt å svare, får vanlig HTTP-status og { error }.
+// Etter det strømmes linjer med JSON (NDJSON): { type: 'progress', stage, chars? } og { type: 'beat' } underveis, så { type: 'done', house } eller { type: 'error', error }.
+async function analyzeRoute(req, res) {
+  const ac = new AbortController();
+  res.on('close', () => { if (!res.writableFinished) ac.abort(); });
+  let started = false, last = 0, beat;
+  const line = obj => res.write(JSON.stringify(obj) + '\n');
+  const on = p => {
+    if (!started) {
+      started = true;
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+      beat = setInterval(() => line({ type: 'beat' }), 15000); // holder forbindelsen åpen mens Claude tenker
+    }
+    if (p.stage === 'write') { clearInterval(beat); const t = Date.now(); if (t - last < 400) return; last = t; }
+    line({ type: 'progress', ...p });
+  };
+  try {
+    const { images } = await readBody(req);
+    if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Legg ANTHROPIC_API_KEY=... i filen .env og start node server.js på nytt.');
+    if (!Array.isArray(images) || images.length < 5) throw fail(400, `Velg minst 5 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
+    if (images.length > 30) throw fail(400, `Du kan sende høyst 30 bilder (fikk ${images.length}).`);
+    const house = await analyze(images, on, ac.signal);
+    if (started) line({ type: 'done', house }); else send(res, 200, { house });
+  } catch (e) {
+    if (!e.status) console.error(e);
+    const error = e.status ? e.message : 'Uventet feil på serveren. Se loggen der serveren kjører.';
+    if (ac.signal.aborted) return;
+    if (started) line({ type: 'error', error }); else send(res, e.status || 500, { error });
+  } finally { clearInterval(beat); if (started) res.end(); }
+}
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/api/status') return send(res, 200, { ai: !!KEY });
-  if (url === '/api/analyze') {
-    if (req.method !== 'POST') return send(res, 405, { error: 'Bruk POST.' });
-    try {
-      if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Sett ANTHROPIC_API_KEY i .env og start serveren på nytt.');
-      const { images } = await readBody(req);
-      if (!Array.isArray(images) || images.length < 5 || images.length > 30) throw fail(400, 'Send mellom 5 og 30 bilder.');
-      send(res, 200, { house: await analyze(images) });
-    } catch (e) { send(res, e.status || 500, { error: e.status ? e.message : 'Uventet feil på serveren.' }); if (!e.status) console.error(e); }
-    return;
-  }
+  if (url === '/api/analyze') return req.method === 'POST' ? analyzeRoute(req, res) : send(res, 405, { error: 'Bruk POST.' });
   const name = url === '/' ? 'index.html' : url.slice(1);
   if (!FILES.includes(name) || req.method !== 'GET') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Ikke funnet'); }
   const type = TYPES[name.split('.').pop()];
