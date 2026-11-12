@@ -1,5 +1,5 @@
 // Cacher appen så den virker uten nett. Øk VERSION når filene endres.
-const VERSION = 'husform-v3';
+const VERSION = 'husform-v4';
 const FILES = ['./', 'index.html', 'style.css', 'js/app.js', 'js/scene.js', 'js/house.js', 'manifest.json', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(

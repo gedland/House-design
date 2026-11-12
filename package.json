@@ -1,0 +1,8 @@
+{
+  "name": "husform",
+  "private": true,
+  "description": "Bilder av ett hus inn, redigerbar 3D-modell ut.",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "@anthropic-ai/sdk": "^1.8.0" }
+}

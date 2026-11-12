@@ -31,10 +31,18 @@
   <button id="undo" type="button" disabled>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 3.5 9.5 8 14M4 9.5h10a6 6 0 0 1 0 12h-3"/></svg>Angre
   </button>
-  <button id="reset" type="button">Demohus</button>
 </header>
+<nav id="floors" aria-label="Visning"></nav>
 <p id="tip">Trykk på en vegg, et gulv, et vindu eller et møbel for å endre det.</p>
-<aside id="panel" aria-label="Valgt objekt" aria-live="polite"></aside>
+<div id="banner" role="status"></div>
+<div id="stick" aria-label="Gå"><i id="knob"></i></div>
+<nav id="bar" aria-label="Verktøy">
+  <button id="b-photos" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l1.5-2h7L17 7h3v12H4Z"/><circle cx="12" cy="13" r="3.5"/></svg>Bilder</button>
+  <button id="b-add" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Legg til</button>
+  <button id="b-walk" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10l8-6 8 6v10M10 20v-6h4v6"/></svg>Gå inn</button>
+  <button id="b-more" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>Mer</button>
+</nav>
+<aside id="panel" aria-label="Panel"></aside>
 <script type="module" src="js/app.js"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
 </body>
