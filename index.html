@@ -13,6 +13,24 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Husform – fra bilder til 3D-modell</title>
 <script>document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';</script>
+<script>
+// Viser en lesbar feilmelding i stedet for en tom side hvis 3D-visningen ikke starter.
+(function () {
+  var shown = false;
+  window.husformFail = function (msg) {
+    if (shown || window.husformReady) return; shown = true;
+    var e = document.getElementById('fatal'); if (!e) return alert(msg);
+    e.firstChild.textContent = msg; e.hidden = false;
+  };
+  addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t.tagName === 'SCRIPT') husformFail('Kunne ikke laste appen eller 3D-biblioteket (Three.js fra cdn.jsdelivr.net). Sjekk nettforbindelsen og last siden på nytt.');
+    else if (e.message) husformFail('3D-visningen stoppet: ' + e.message + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+  }, true);
+  addEventListener('unhandledrejection', function (e) { husformFail('3D-visningen stoppet: ' + (e.reason && e.reason.message || e.reason)); });
+  setTimeout(function () { husformFail('3D-visningen startet ikke. Enten ble ikke Three.js lastet fra cdn.jsdelivr.net, eller så er nettleseren for gammel (krever iOS 16.4 eller nyere Chrome, Edge eller Firefox).'); }, 12000);
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
@@ -43,6 +61,7 @@
   <button id="b-more" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>Mer</button>
 </nav>
 <aside id="panel" aria-label="Panel"></aside>
+<div id="fatal" role="alert" hidden><p></p><button type="button" onclick="location.reload()">Last på nytt</button></div>
 <script type="module" src="js/app.js"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
 </body>

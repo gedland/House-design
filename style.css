@@ -74,6 +74,9 @@ h2 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2
 .fields input, .fields select { width: 100%; min-width: 0; height: 44px; padding: 0 10px; background: var(--well); border: 1px solid var(--line); border-radius: 10px; }
 .fields input[type=color] { padding: 4px; cursor: pointer; }
 
+#fatal { position: fixed; inset: 0; z-index: 9; display: grid; place-content: center; justify-items: center; gap: 16px; padding: 24px; text-align: center; background: var(--surface); overflow-wrap: anywhere; }
+#fatal[hidden] { display: none; }
+#fatal button { min-height: 48px; padding: 0 20px; font-weight: 600; background: var(--accent); color: var(--on-accent); }
 h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: -4px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .tile, .list > *, .pick { min-height: 44px; padding: 0 8px; font-size: 15px; font-weight: 500; border: 1px solid var(--line); border-radius: 10px; }

@@ -8,7 +8,9 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
 const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], ai: false, busy: false, note: '' };
-const view = createView($('#view'));
+let view;
+try { view = createView($('#view')); }
+catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
 
 // Lagring i IndexedDB
 const DB = new Promise((ok, no) => { const r = indexedDB.open('husform', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
@@ -298,5 +300,5 @@ matchMedia('(min-width: 760px)').addEventListener('change', ui);
 fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; if (S.sheet === 'photos') ui(); }).catch(() => {});
 db('readonly', s => s.get('house')).then(saved => {
   try { if (saved?.version === 1) S.house = normalize(saved); } catch {}
-  view.build(S.house, { floor: null }); view.frame(); ui();
+  view.build(S.house, { floor: null }); view.frame(); ui(); window.husformReady = true;
 });
