@@ -1,7 +1,7 @@
 {
-  "name": "Husdesign",
-  "short_name": "Husdesign",
-  "description": "Endre huset ditt med tekst, eller lag et nytt.",
+  "name": "Husform",
+  "short_name": "Husform",
+  "description": "Fra bilder av huset til redigerbar 3D-modell.",
   "lang": "nb",
   "dir": "ltr",
   "start_url": "./",

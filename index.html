@@ -7,101 +7,35 @@
 <meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Husdesign">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Husform">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>Husform – endre huset ditt med tekst</title>
-<script>document.documentElement.dataset.theme = localStorage.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');</script>
+<title>Husform – fra bilder til 3D-modell</title>
+<script>document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
 </head>
 <body>
+<canvas id="view" aria-label="3D-visning av huset"></canvas>
 <header>
   <h1>Husform</h1>
-  <nav role="tablist" aria-label="Arbeidsmodus">
-    <button role="tab" id="tab-edit" aria-controls="panel-edit" aria-selected="true">Endre hus</button>
-    <button role="tab" id="tab-create" aria-controls="panel-create" aria-selected="false">Lag nytt hus</button>
-  </nav>
-  <span id="demo" hidden></span>
-  <button id="theme" class="icon" type="button">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path class="moon" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/><g class="sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></g></svg>
+  <button id="undo" type="button" disabled>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 3.5 9.5 8 14M4 9.5h10a6 6 0 0 1 0 12h-3"/></svg>Angre
   </button>
+  <button id="reset" type="button">Demohus</button>
 </header>
-
-<main>
-  <aside id="library" aria-label="Bilder">
-    <label id="drop">
-      <input id="file" type="file" accept="image/*" multiple>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5m0 0L7.5 9.5M12 5l4.5 4.5M4 19h16"/></svg>
-      <strong>Slipp bilder her</strong>
-      <span>eller velg filer. Ute, inne og tomt.</span>
-    </label>
-    <ul id="list"></ul>
-    <button id="wipe" type="button">Slett alt</button>
-  </aside>
-
-  <section id="work" aria-label="Bilde">
-    <div id="tools" role="toolbar" aria-label="Markering">
-      <button type="button" data-tool="brush">Pensel</button>
-      <button type="button" data-tool="erase">Viskelær</button>
-      <label>Størrelse <input id="size" type="range" min="1" max="15" value="5"></label>
-      <button id="clear" type="button">Tøm markering</button>
-      <span class="hint">Mal over området som skal endres.</span>
-    </div>
-    <div id="stage"></div>
-    <div id="history">
-      <div id="acts">
-        <button id="undo" type="button" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 3.5 9.5 8 14M4 9.5h10a6 6 0 0 1 0 12h-3"/></svg>Angre
-        </button>
-        <button id="dl" type="button" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M4 19h16"/></svg>Last ned
-        </button>
-        <button id="dl2" type="button" disabled>Last ned før/etter</button>
-        <label>Sammenlign med <select id="cmp" disabled></select></label>
-      </div>
-      <ol id="versions" aria-label="Versjoner"></ol>
-    </div>
-  </section>
-
-  <aside id="panel">
-    <form id="panel-edit" role="tabpanel" aria-labelledby="tab-edit">
-      <h2>Endre en del av huset</h2>
-      <fieldset>
-        <legend>Hva skal endres?</legend>
-        <div id="elements" class="chips"></div>
-      </fieldset>
-      <div class="row"><label for="wish">Til hva?</label><button id="keep" type="button">Lagre ønske</button></div>
-      <textarea id="wish" rows="3" maxlength="400" placeholder="f.eks. mørk eikedør med smalt glassfelt"></textarea>
-      <div id="wishes" class="chips" aria-label="Lagrede ønsker"></div>
-      <label for="color">Farge i forhåndsvisningen</label>
-      <input id="color" type="color" value="#5a3b26">
-      <h3>Prompt</h3>
-      <pre id="prompt-edit" class="prompt"></pre>
-      <button class="primary" type="submit">Lag ny versjon</button>
-    </form>
-
-    <form id="panel-create" role="tabpanel" aria-labelledby="tab-create" hidden>
-      <h2>Lag nytt hus</h2>
-      <label for="style">Stil</label>
-      <select id="style"></select>
-      <label for="desc">Beskrivelse</label>
-      <textarea id="desc" rows="5" maxlength="800" placeholder="f.eks. to etasjer, stående kledning i mørk grå, store vinduer mot sør, carport"></textarea>
-      <p id="refs" class="hint"></p>
-      <h3>Prompt</h3>
-      <pre id="prompt-create" class="prompt"></pre>
-      <button class="primary" type="submit">Lag hus</button>
-    </form>
-    <p id="mode" class="hint"></p>
-    <p id="status" role="status"></p>
-  </aside>
-</main>
-<script src="provider.js"></script>
-<script src="app.js"></script>
+<p id="tip">Trykk på en vegg, et gulv, et vindu eller et møbel for å endre det.</p>
+<aside id="panel" aria-label="Valgt objekt" aria-live="polite"></aside>
+<script type="module" src="js/app.js"></script>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
 </body>
 </html>
