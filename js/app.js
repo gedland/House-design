@@ -34,6 +34,7 @@ function replace(house) {
   $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(); ui(); save();
 }
 function select(id) {
+  if (S.busy) return; // arket med fremdrift blir stående til tolkningen er ferdig
   if (id !== S.sel) S.move = false;
   S.sel = id && find(S.house, id) ? id : null; if (S.sel) { S.sheet = null; localStorage.tipSeen = 1; }
   draw(); ui();
@@ -159,31 +160,51 @@ async function shrink(file) {
   return c.toDataURL('image/jpeg', .8);
 }
 async function addPhotos(files) {
-  for (const f of files) { if (S.photos.length >= 30) break; try { S.photos.push(await shrink(f)); } catch { S.note = 'Noen av filene kunne ikke leses som bilder.'; } }
-  ui();
+  let bad = 0, big = 0, over = 0; S.busy = 'shrink';
+  for (const [i, f] of files.entries()) {
+    if (S.photos.length >= 30) { over = files.length - i; break; }
+    if (f.size > 40e6) { big++; continue; }
+    S.note = `Krymper bilde ${i + 1} av ${files.length} …`; ui();
+    try { S.photos.push(await shrink(f)); } catch { bad++; }
+  }
+  S.busy = false;
+  say([bad && `${bad} ${bad === 1 ? 'fil' : 'filer'} kunne ikke leses som bilde (HEIC fra iPhone virker bare i Safari).`, big && `${big} ${big === 1 ? 'fil var' : 'filer var'} over 40 MB og ble hoppet over.`,
+    over && `Du kan ha høyst 30 bilder, så ${over} ble ikke lagt til.`].filter(Boolean).join(' '));
 }
+let tick;
 async function analyze() {
-  S.busy = true; say('Claude leser bildene og bygger modellen. Det kan ta et par minutter.');
+  const t0 = Date.now(), stop = new AbortController(), limit = setTimeout(() => stop.abort(), 8 * 60000);
+  const clock = () => { const s = Math.round((Date.now() - t0) / 1000), el = $('#elapsed'); if (el) el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  S.busy = 'analyze'; say(''); tick = setInterval(clock, 1000);
   try {
-    const r = await fetch('api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images: S.photos }) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || `Serveren svarte med feil ${r.status}.`);
-    S.busy = false; S.note = ''; S.photos = []; replace(normalize(j.house));
+    const r = await fetch('api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images: S.photos }), signal: stop.signal });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(j?.error || (r.status === 413 ? 'Bildene er for store til sammen. Fjern noen bilder og prøv igjen.' : r.status === 404 || r.status === 405 ? 'Denne adressen har ingen server som kan tolke bilder. Start appen med node server.js.' : `Serveren svarte med feil ${r.status}. Prøv igjen.`));
+    if (!j?.house) throw new Error('Serveren svarte uten noe hus. Prøv igjen.');
+    const house = normalize(j.house);
+    S.busy = false; S.note = ''; S.photos = []; replace(house);
     // Serveren har kontrollert modellen før den tegnes. Alt den rettet eller ikke fikk rettet, vises her.
     const rep = j.report; if (rep?.fixed?.length || rep?.problems?.length) { S.report = rep; S.sheet = 'report'; ui(); }
-  } catch (e) { S.busy = false; say(e instanceof TypeError ? 'Fikk ikke kontakt med serveren.' : e.message); }
+  } catch (e) {
+    S.busy = false;
+    say(e.name === 'AbortError' ? 'Tolkningen tok over 8 minutter og ble avbrutt. Prøv igjen med færre bilder.' : e instanceof TypeError ? 'Fikk ikke kontakt med serveren. Sjekk nettforbindelsen og at serveren kjører, og prøv igjen. Bildene dine er ikke borte.' : e.message);
+  } finally { clearInterval(tick); clearTimeout(limit); }
 }
 function photoSheet() {
-  const n = S.photos.length, file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: e => addPhotos([...e.target.files]) });
+  const n = S.photos.length, busy = !!S.busy, file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, disabled: busy, onchange: e => addPhotos([...e.target.files]) });
+  const hint = S.ai ? 'Velg 5–30 bilder av ett hus, både ute og inne. Jo flere rom og vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.'
+    : S.ai === null ? 'Fikk ikke kontakt med serveren, så bildene kan ikke tolkes nå. Appen må kjøres med node server.js for å tolke bilder. Du kan åpne demohuset i stedet.'
+    : 'Serveren har ingen API-nøkkel, så bildene kan ikke tolkes her. Du kan åpne demohuset i stedet. Sett ANTHROPIC_API_KEY i .env og start node server.js for å bruke egne bilder.';
   return [head('Nytt hus', 'Fra bilder til 3D', () => sheet(null)),
-    h('p', { className: 'hint', textContent: S.ai ? 'Velg 5–30 bilder av ett hus, både ute og inne. Jo flere rom og vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.'
-      : 'Serveren har ingen API-nøkkel, så bildene kan ikke tolkes her. Du kan åpne demohuset i stedet. Sett ANTHROPIC_API_KEY i .env og start node server.js for å bruke egne bilder.' }),
-    S.ai && h('div', { className: 'photos' }, S.photos.map((src, i) => h('button', { type: 'button', ariaLabel: `Fjern bilde ${i + 1}`, disabled: S.busy, onclick: () => { S.photos.splice(i, 1); ui(); } }, h('img', { src, alt: '' }))),
+    h('p', { className: 'hint', textContent: hint }),
+    S.ai && h('div', { className: 'photos' }, S.photos.map((src, i) => h('button', { type: 'button', ariaLabel: `Fjern bilde ${i + 1}`, title: 'Fjern bildet', disabled: busy, onclick: () => { S.photos.splice(i, 1); S.note = ''; ui(); } }, h('img', { src, alt: '' }), h('i', { textContent: '✕' }))),
       n < 30 && h('label', { className: 'pick' }, file, '+ Bilder')),
-    S.ai ? btn(S.busy ? 'Arbeider …' : n < 5 ? `Velg minst 5 bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: S.busy || n < 5 })
+    S.ai && n > 0 && !busy && h('p', { className: 'hint', textContent: `${n} ${n === 1 ? 'bilde' : 'bilder'} valgt. Trykk på et bilde for å fjerne det.` }),
+    S.busy === 'analyze' && h('div', { className: 'progress', role: 'status' }, h('div', { className: 'bar' }),
+      h('p', {}, 'Claude tolker bildene og bygger modellen. Det tar vanligvis 1–3 minutter. Ikke lukk siden. ', h('b', { id: 'elapsed', textContent: '0:00' }))),
+    S.ai ? btn(S.busy === 'analyze' ? 'Arbeider …' : S.busy ? 'Krymper bilder …' : n < 5 ? `Velg minst 5 bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: busy || n < 5 })
       : btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })];
 }
-
 function reportSheet() {
   const { fixed = [], problems = [] } = S.report || {}, items = a => h('ul', { className: 'report' }, a.map(t => h('li', { textContent: t })));
   return [head('Fra bilder til 3D', 'Kontroll av modellen', () => sheet(null)),
@@ -220,7 +241,7 @@ function moreSheet() {
       S.floor !== null && S.house.floors.length > 1 && btn(`Slett ${S.house.floors[S.floor].name}`, removeFloor, { className: 'danger' }),
       btn('Åpne demohuset', () => { if (confirm('Bytte ut huset med demohuset? Du kan angre etterpå.')) replace(clone(DEMO)); }))];
 }
-function sheet(name) { S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
+function sheet(name) { if (S.busy) return; S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
 
 // Interiørmodus
 function enter() {
@@ -307,7 +328,7 @@ addEventListener('keydown', e => {
   if (e.target.matches('input, select, textarea')) return;
   const k = e.key.toLowerCase();
   if (S.walk && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { e.preventDefault(); keys.add(k); return keyMove(); }
-  if (k === 'escape') { if (S.sel || S.sheet || S.placing) { S.placing = null; S.sheet = null; S.note = ''; select(null); } else if (S.walk) leave(); }
+  if (k === 'escape' && !S.busy) { if (S.sel || S.sheet || S.placing) { S.placing = null; S.sheet = null; S.note = ''; select(null); } else if (S.walk) leave(); }
   if ((k === 'delete' || k === 'backspace') && S.sel) remove();
   if (k === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#undo').click(); }
 });
@@ -319,7 +340,7 @@ matchMedia('(min-width: 760px)').addEventListener('change', ui);
 const flush = () => { commit(); if (saveT) store(); };
 addEventListener('pagehide', flush); document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 
-fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; if (S.sheet === 'photos') ui(); }).catch(() => {});
+fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; }).catch(() => { S.ai = null; }).then(() => { if (S.sheet === 'photos') ui(); });
 db('readonly', s => s.get('house')).then(saved => {
   try { if (saved?.version === 1) S.house = normalize(saved); } catch {}
   view.build(S.house, { floor: null }); view.frame(); ui(); window.husformReady = true;
