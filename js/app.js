@@ -16,7 +16,11 @@ catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebG
 const DB = new Promise((ok, no) => { const r = indexedDB.open('husform', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
 const db = (mode, fn) => DB.then(d => new Promise((ok, no) => { const q = fn(d.transaction('kv', mode).objectStore('kv')); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); })).catch(() => null);
 let saveT;
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => db('readwrite', s => s.put(S.house, 'house')), 300); };
+const write = () => { clearTimeout(saveT); saveT = 0; return db('readwrite', s => s.put(S.house, 'house')); };
+const save = () => { clearTimeout(saveT); saveT = setTimeout(write, 300); };
+// Lukkes eller skjules siden før lagringen har rukket å gå, lagres det med en gang.
+const flush = () => { commit(); if (saveT) write(); };
+addEventListener('pagehide', flush); document.addEventListener('visibilitychange', () => document.hidden && flush());
 
 // Alle endringer går gjennom edit(): JSON endres, 3D tegnes på nytt. commit() lagrer og legger et angre-steg.
 let drawT = 0;
@@ -29,10 +33,12 @@ function commit() {
 }
 // Bytter ut hele huset. Det gamle huset blir et angre-steg.
 function replace(house) {
+  commit();
   S.undo.push(JSON.stringify(S.house)); S.house = house; S.sel = null; S.move = false; S.floor = null; S.sheet = null; S.pending = null;
   $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(); ui(); save();
 }
 function select(id) {
+  commit(); // en påbegynt endring i et felt blir sitt eget angre-steg og lagres
   if (id !== S.sel) S.move = false;
   S.sel = id && find(S.house, id) ? id : null; if (S.sel) { S.sheet = null; localStorage.tipSeen = 1; }
   draw(); ui();
@@ -205,7 +211,7 @@ function moreSheet() {
       S.floor !== null && S.house.floors.length > 1 && btn(`Slett ${S.house.floors[S.floor].name}`, removeFloor, { className: 'danger' }),
       btn('Åpne demohuset', () => { if (confirm('Bytte ut huset med demohuset? Du kan angre etterpå.')) replace(clone(DEMO)); }))];
 }
-function sheet(name) { S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
+function sheet(name) { commit(); S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
 
 // Interiørmodus
 function enter() {
@@ -284,7 +290,7 @@ cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
 $('#undo').onclick = () => {
-  const s = S.undo.pop(); if (!s) return;
+  commit(); const s = S.undo.pop(); if (!s) return;
   S.house = JSON.parse(s); S.pending = null; $('#undo').disabled = !S.undo.length;
   if (S.walk && !S.house.floors[S.walk.floor]) leave();
   if (S.floor !== null && !S.house.floors[S.floor]) S.floor = null;
