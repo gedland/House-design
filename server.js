@@ -26,7 +26,7 @@ const SCHEMA = obj({
     name: T, height: num('Etasjehøyde i meter, normalt 2.4'),
     rooms: list(obj({ name: T, x: N, z: N, w: num('Bredde langs x'), d: num('Dybde langs z'), material: MAT, color: COLOR })),
     walls: list(obj({ x1: N, z1: N, x2: N, z2: N, thickness: N, material: MAT, color: COLOR,
-      openings: list(obj({ type: one(['door', 'window']), pos: num('Meter fra (x1, z1) til midten av åpningen'), width: N, height: N, sill: num('Høyde fra gulvet til underkanten, 0 for dører'), color: COLOR })) })),
+      openings: list(obj({ type: one(['door', 'window']), pos: num('Meter fra (x1, z1) til midten av åpningen'), width: N, height: N, sill: num('Høyde fra gulvet til underkanten, 0 for dører'), material: MAT, color: COLOR })) })),
     furniture: list(obj({ type: one(Object.keys(FURNITURE)), x: N, z: N, rot: num('0, 90, 180 eller 270: hvilken vei ryggen vender'), w: N, d: N, h: N, material: MAT, color: COLOR })),
   })),
   roof: obj({ type: one(Object.keys(ROOFS)), pitch: N, overhang: N, material: MAT, color: COLOR }),
@@ -78,7 +78,7 @@ Bildene viser aldri hele huset. Anslå resten ut fra det som er vanlig for et hu
 
 # Farger og materialer
 
-Les fargene av bildene som hex-koder. Bruk fargen flaten har i jevnt dagslys, ikke i skygge eller motlys. Yttervegger får fasadens farge og materiale ("panel" for trekledning, "murstein", "betong" for mur og puss). Vindusrammer og dører får fargen de har på bildene. Taket får takets farge og materiale. Gulv får materialet du ser ("tre" for parkett og laminat, "flis", "betong", "tekstil" for teppe).
+Les fargene av bildene som hex-koder. Bruk fargen flaten har i jevnt dagslys, ikke i skygge eller motlys. Yttervegger får fasadens farge og materiale ("panel" for trekledning, "murstein", "betong" for mur og puss). Vindusrammer og dører får fargen de har på bildene, og materialet til karmen eller dørbladet (oftest "maling" for vinduer og "tre" eller "maling" for dører). Taket får takets farge og materiale. Gulv får materialet du ser ("tre" for parkett og laminat, "flis", "betong", "tekstil" for teppe).
 
 # Kontroller svaret
 

@@ -4,7 +4,7 @@
 //   floors: [{ id, name, height,
 //     rooms:     [{ id, name, x, z, w, d, material, color }],            // x,z = hjørne, w = bredde (x), d = dybde (z); materiale/farge gjelder gulvet
 //     walls:     [{ id, x1, z1, x2, z2, thickness, material, color,
-//                   openings: [{ id, type: 'door'|'window', pos, width, height, sill, color }] }],  // pos = senter, målt fra (x1,z1)
+//                   openings: [{ id, type: 'door'|'window', pos, width, height, sill, material, color }] }],  // pos = senter, målt fra (x1,z1); materiale/farge gjelder dørblad eller karm
 //     furniture: [{ id, type, x, z, rot, w, d, h, material, color }]     // x,z = senter, rot i grader
 //   }],
 //   roof: { type: 'gable'|'hip'|'flat', pitch, overhang, material, color } | null
@@ -29,7 +29,7 @@ export const FURNITURE = {
   plante: { label: 'Plante', w: .5, d: .5, h: 1.2, material: 'maling', color: '#4f7a4c' },
   annet: { label: 'Annet', w: .8, d: .8, h: .8, material: 'maling', color: '#b9b4a8' },
 };
-export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, color: '#f2efe8' } };
+export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, material: 'tre', color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, material: 'maling', color: '#f2efe8' } };
 export const ROOFS = { gable: 'Saltak', hip: 'Valmtak', flat: 'Flatt tak' };
 export const uid = p => p + Math.random().toString(36).slice(2, 8);
 export const round = v => Math.round(v * 1000) / 1000;
@@ -82,7 +82,7 @@ export function normalize(h) {
     id: id(f, 'f'), name: String(f.name || `${i + 1}. etasje`).slice(0, 40), height: n(f.height, 2.4, 1.8, 6),
     rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'tre'), color: col(r.color, '#c8a57a') })),
     walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), material: mt(w.material, 'maling'), color: col(w.color, P),
-      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), color: col(o.color, d.color) }; }) }))
+      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), material: mt(o.material, d.material), color: col(o.color, d.color) }; }) }))
       .filter(w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1) >= .1),
     furniture: arr(f.furniture).map(m => { const t = FURNITURE[m.type] ? m.type : 'annet', d = FURNITURE[t]; return { id: id(m, 'm'), type: t, x: n(m.x, 0), z: n(m.z, 0), rot: n(m.rot, 0, -360, 360), w: n(m.w, d.w, .1, 12), d: n(m.d, d.d, .1, 12), h: n(m.h, d.h, .1, 5), material: mt(m.material, d.material), color: col(m.color, d.color) }; }),
   }));
@@ -132,17 +132,56 @@ export function bounds(floor) {
   for (const r of floor.rooms) { xs.push(r.x, r.x + r.w); zs.push(r.z, r.z + r.d); }
   return xs.length ? { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) } : null;
 }
-// Flytter eller endrer størrelse på et rom. Vegger og møbler som hører til rommet følger med.
-export function reshapeRoom(floor, room, next) {
-  const o = { x: room.x, z: room.z, w: room.w, d: room.d }, n = { ...o, ...next }, e = .03;
-  n.w = Math.max(.5, n.w); n.d = Math.max(.5, n.d);
-  const inside = (x, z, m) => x >= o.x - m && x <= o.x + o.w + m && z >= o.z - m && z <= o.z + o.d + m;
-  const map = (v, a, len, na, nlen) => round(Math.abs(v - a) < e ? na : Math.abs(v - a - len) < e ? na + nlen : na + (v - a) * nlen / len);
-  for (const w of floor.walls) for (const k of [1, 2]) if (inside(w['x' + k], w['z' + k], e)) {
-    w['x' + k] = map(w['x' + k], o.x, o.w, n.x, n.w); w['z' + k] = map(w['z' + k], o.z, o.d, n.z, n.d);
+// Flaten som dekkes av rom (minus «minus»), delt i rektangler som ikke overlapper, størst først.
+export function rects(rooms, minus = []) {
+  const u = v => [...new Set(v)].sort((a, b) => a - b), all = [...rooms, ...minus], hit = (l, x, z) => l.some(r => x > r.x && x < r.x + r.w && z > r.z && z < r.z + r.d);
+  const xs = u(all.flatMap(r => [r.x, r.x + r.w])), zs = u(all.flatMap(r => [r.z, r.z + r.d])), nx = xs.length - 1, nz = zs.length - 1, out = [];
+  const full = Array.from({ length: nx }, (_, i) => Array.from({ length: nz }, (_, j) => { const x = (xs[i] + xs[i + 1]) / 2, z = (zs[j] + zs[j + 1]) / 2; return hit(rooms, x, z) && !hit(minus, x, z); }));
+  for (;;) {
+    let best = null;
+    for (let i0 = 0; i0 < nx; i0++) for (let j0 = 0; j0 < nz; j0++) {
+      let jm = nz - 1;
+      for (let i1 = i0; i1 < nx && full[i1][j0]; i1++) {
+        let j = j0; while (j < jm && full[i1][j + 1]) j++; jm = j;
+        const area = (xs[i1 + 1] - xs[i0]) * (zs[jm + 1] - zs[j0]);
+        if (!best || area > best.area + 1e-6) best = { area, i0, i1, j0, j1: jm };
+      }
+    }
+    if (!best) return out;
+    for (let i = best.i0; i <= best.i1; i++) for (let j = best.j0; j <= best.j1; j++) full[i][j] = false;
+    out.push({ x0: xs[best.i0], x1: xs[best.i1 + 1], z0: zs[best.j0], z1: zs[best.j1 + 1] });
   }
-  for (const f of floor.furniture) if (inside(f.x, f.z, 0)) { f.x = map(f.x, o.x, o.w, n.x, n.w); f.z = map(f.z, o.z, o.d, n.z, n.d); }
-  Object.assign(room, { x: round(n.x), z: round(n.z), w: round(n.w), d: round(n.d) });
+}
+// Flytter en vegg. Flyttes den på tvers, følger rommene den avgrenser med, og veggene som møter den, strekkes eller krympes.
+// Slik holder ytterveggene seg lukket, og taket (som følger rommene) flytter seg med.
+export function moveWall(floor, w, dx, dz) {
+  const s = span(w);
+  if (!s) { w.x1 = round(w.x1 + dx); w.x2 = round(w.x2 + dx); w.z1 = round(w.z1 + dz); w.z2 = round(w.z2 + dz); return; }
+  const q = s.k, along = q === 'x' ? dx : dz;
+  if (!moveEdge(floor, q, s.c, s.a, s.b, q === 'x' ? dz : dx) && along) { w[q + 1] = round(w[q + 1] + along); w[q + 2] = round(w[q + 2] + along); }
+}
+// Flytter en kant på tvers: linjen langs aksen q, i posisjon c, fra a til b, flyttes d. Rom med kanten sin der endrer størrelse (ned til 0,5 m),
+// og veggender på linjen følger med. Returnerer om noen rom lå inntil kanten.
+function moveEdge(floor, q, c, a, b, d) {
+  const e = .03, [p, sz, len] = q === 'x' ? ['z', 'd', 'w'] : ['x', 'w', 'd'];
+  const near = floor.rooms.filter(r => r[q] < b - e && r[q] + r[len] > a + e).map(r => [r, Math.abs(r[p] - c) < e ? 1 : Math.abs(r[p] + r[sz] - c) < e ? 2 : 0]).filter(x => x[1]);
+  for (const [r, edge] of near) d = edge === 1 ? Math.min(d, r[sz] - .5) : Math.max(d, .5 - r[sz]);
+  if (d) {
+    for (const [r, edge] of near) { if (edge === 1) { r[p] = round(r[p] + d); r[sz] = round(r[sz] - d); } else r[sz] = round(r[sz] + d); }
+    for (const v of floor.walls) for (const k of [1, 2]) if (Math.abs(v[p + k] - c) < e && v[q + k] > a - e && v[q + k] < b + e) v[p + k] = round(v[p + k] + d);
+  }
+  return near.length > 0;
+}
+// Flytter eller endrer størrelse på et rom. Ny bredde eller dybde flytter romkanten: veggene på kanten følger med og naborommet krymper eller vokser.
+// Ny plassering flytter rommet med veggene og møblene sine.
+export function reshapeRoom(floor, room, next) {
+  if (next.w !== undefined) moveEdge(floor, 'z', room.x + room.w, room.z, room.z + room.d, Math.max(.5, next.w) - room.w);
+  if (next.d !== undefined) moveEdge(floor, 'x', room.z + room.d, room.x, room.x + room.w, Math.max(.5, next.d) - room.d);
+  const dx = (next.x ?? room.x) - room.x, dz = (next.z ?? room.z) - room.z, e = .03; if (!dx && !dz) return;
+  const inside = (x, z, m) => x >= room.x - m && x <= room.x + room.w + m && z >= room.z - m && z <= room.z + room.d + m;
+  for (const w of floor.walls) for (const k of [1, 2]) if (inside(w['x' + k], w['z' + k], e)) { w['x' + k] = round(w['x' + k] + dx); w['z' + k] = round(w['z' + k] + dz); }
+  for (const f of floor.furniture) if (inside(f.x, f.z, 0)) { f.x = round(f.x + dx); f.z = round(f.z + dz); }
+  room.x = round(room.x + dx); room.z = round(room.z + dz);
 }
 
 // ---- Kontroll av et tolket hus ----
@@ -177,6 +216,17 @@ function grid(f) {
   for (let i = 0; i < nx; i++) for (let j = 0; j <= nz; j++) edges.push(['x', i, j, room(i, j - 1), room(i, j)]);
   const ends = ([k, i, j]) => k === 'x' ? { c: zs[j], a: xs[i], b: xs[i + 1] } : { c: xs[i], a: zs[j], b: zs[j + 1] };
   return { xs, zs, nx, nz, full, wall, edges, ends };
+}
+// Legger til yttervegger der ytterkanten av rommene ikke er dekket av en vegg. Returnerer strekkene som ble lagt til.
+export function closeRim(f, others = []) {
+  const g = grid(f), thick = l => [...l].sort((a, b) => b.thickness - a.thickness)[0];
+  const rim = g.edges.filter(e => !e[3] !== !e[4]), onRim = f.walls.find(w => { const s = span(w); return s && rim.some(e => { const p = g.ends(e); return e[0] === s.k && Math.abs(p.c - s.c) < EPS && p.a >= s.a - EPS && p.b <= s.b + EPS; }); });
+  const tpl = onRim || thick(f.walls) || thick(others) || { thickness: .2, material: 'panel', color: '#e9e4d8' };
+  const gaps = rim.filter(e => !g.wall(e[0], e[1], e[2])).map(e => ({ k: e[0], ...g.ends(e) })).sort((p, q) => p.k.localeCompare(q.k) || p.c - q.c || p.a - q.a);
+  const runs = [];
+  for (const e of gaps) { const l = runs.at(-1); if (l && l.k === e.k && Math.abs(l.c - e.c) < EPS && Math.abs(l.b - e.a) < EPS) l.b = e.b; else runs.push({ ...e }); }
+  for (const r of runs) f.walls.push({ id: uid('w'), ...(r.k === 'x' ? { x1: r.a, z1: r.c, x2: r.b, z2: r.c } : { x1: r.c, z1: r.a, x2: r.c, z2: r.b }), thickness: Math.max(.15, tpl.thickness), material: tpl.material, color: tpl.color, openings: [] });
+  return runs;
 }
 const area = r => r.w * r.d, plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -290,13 +340,7 @@ export function check(house) {
     if (cut) fix(`Kortet ned ${plural(cut, 'vegg', 'vegger')} som stakk utenfor huset.`);
 
     // 6. Ytterkanten av grunnflaten skal være dekket av vegger hele veien rundt. Det som mangler, legges til.
-    g = grid(f);
-    const rim = g.edges.filter(e => !e[3] !== !e[4]), onRim = f.walls.find(w => { const s = span(w); return s && rim.some(e => { const p = g.ends(e); return e[0] === s.k && Math.abs(p.c - s.c) < EPS && p.a >= s.a - EPS && p.b <= s.b + EPS; }); });
-    const tpl = onRim || [...f.walls].sort((a, b) => b.thickness - a.thickness)[0] || house.floors.flatMap(x => x.walls).sort((a, b) => b.thickness - a.thickness)[0] || { thickness: .2, material: 'panel', color: '#e9e4d8' };
-    const gaps = rim.filter(e => !g.wall(e[0], e[1], e[2])).map(e => ({ k: e[0], ...g.ends(e) })).sort((p, q) => p.k.localeCompare(q.k) || p.c - q.c || p.a - q.a);
-    const runs = [];
-    for (const e of gaps) { const l = runs.at(-1); if (l && l.k === e.k && Math.abs(l.c - e.c) < EPS && Math.abs(l.b - e.a) < EPS) l.b = e.b; else runs.push({ ...e }); }
-    for (const r of runs) f.walls.push({ id: uid('w'), ...(r.k === 'x' ? { x1: r.a, z1: r.c, x2: r.b, z2: r.c } : { x1: r.c, z1: r.a, x2: r.c, z2: r.b }), thickness: Math.max(.15, tpl.thickness), material: tpl.material, color: tpl.color, openings: [] });
+    const runs = closeRim(f, house.floors.flatMap(x => x.walls));
     if (runs.length) fix(`La til ${plural(runs.length, 'yttervegg', 'yttervegger')} som manglet (${Math.round(runs.reduce((s, r) => s + r.b - r.a, 0) * 10) / 10} m), så huset er lukket.`);
 
     // 7. Åpninger skal ligge innenfor veggen sin, under taket, og ikke oppå hverandre.
@@ -339,7 +383,7 @@ export function check(house) {
         const width = Math.min(.9, b - a - .3); if (width < .6) return null;
         const free = x => x - width / 2 >= Math.max(a, s.a + .1) && x + width / 2 <= Math.min(b, s.b - .1) && s.w.openings.every(o => Math.abs(absPos(s, o) - x) >= (o.width + width) / 2 + .1);
         const x = [(a + b) / 2, a + .15 + width / 2, b - .15 - width / 2].find(free);
-        return x === undefined ? null : { s, o: { id: uid('o'), type: 'door', sill: 0, color: '#efece6', width: round(width), height: Math.min(2.1, round(f.height - .1)), pos: round(s.fwd ? x - s.a : s.b - x) } };
+        return x === undefined ? null : { s, o: { id: uid('o'), type: 'door', sill: 0, material: 'tre', color: '#efece6', width: round(width), height: Math.min(2.1, round(f.height - .1)), pos: round(s.fwd ? x - s.a : s.b - x) } };
       }).find(Boolean);
       if (door) { door.s.w.openings.push(door.o); fix(`Satte inn en dør til «${r.name}», som ikke hadde noen inngang.`); }
       else bad(`Rommet «${r.name}» har ingen dør, og det var ikke plass til å sette inn en.`);

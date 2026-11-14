@@ -1,4 +1,4 @@
-import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom, blocked } from './house.js';
+import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom, blocked, moveWall, rects, closeRim } from './house.js';
 import { createView } from './scene.js';
 
 const $ = s => document.querySelector(s);
@@ -46,7 +46,7 @@ const colorF = (label = 'Farge') => ({ key: 'color', label, type: 'color' }), ma
 const FIELDS = {
   room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1.8), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   wall: [colorF(), matF(), num('length', 'Lengde (m)', .2), num('angle', 'Retning (°)', -360, 15), num('thickness', 'Tykkelse (m)', .05, .01)],
-  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
+  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), matF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
   furniture: [{ key: 'type', label: 'Type', type: 'select', options: opts(FURNITURE) }, colorF(), matF(), num('w', 'Bredde (m)', .1), num('d', 'Dybde (m)', .1), num('h', 'Høyde (m)', .1), num('rot', 'Rotasjon (°)', -360, 15), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   roof: [{ key: 'type', label: 'Takform', type: 'select', options: opts(ROOFS) }, colorF(), matF(), num('pitch', 'Takvinkel (°)', 5, 1), num('overhang', 'Takutstikk (m)')],
 };
@@ -64,6 +64,13 @@ function setValue(f, key, v) {
   else if (f.kind === 'room' && key === 'height') f.floor.height = v;
   else if (f.kind === 'room' && 'xzwd'.includes(key)) reshapeRoom(f.floor, f.item, { [key]: v });
   else f.item[key] = v;
+  if (f.kind === 'opening') fitOpening(f);
+}
+// Holder en åpning innenfor veggen sin og under taket.
+function fitOpening(f) {
+  const o = f.item, L = wallLength(f.wall);
+  o.width = round(Math.min(o.width, Math.max(.3, L - .2))); o.sill = round(Math.min(o.sill, f.floor.height - .35)); o.height = round(Math.min(o.height, f.floor.height - .05 - o.sill));
+  o.pos = round(Math.min(L - .1 - o.width / 2, Math.max(.1 + o.width / 2, o.pos)));
 }
 const head = (small, big, close) => h('div', { className: 'head' }, h('div', {}, small && h('small', { textContent: small }), h('h2', { textContent: big })), btn('✕', close, { className: 'icon', ariaLabel: 'Lukk' }));
 function selectionPanel(f) {
@@ -113,10 +120,11 @@ function addRoom() {
   select(room.id);
 }
 function addFloor() {
-  const below = S.house.floors.at(-1), b = bounds(below) || { x0: 0, x1: 6, z0: 0, z1: 5 }, like = below.walls[0];
-  const f = { id: uid('f'), name: `${S.house.floors.length + 1}. etasje`, height: 2.4, furniture: [],
-    rooms: [{ id: uid('r'), name: 'Rom', x: b.x0, z: b.z0, w: round(b.x1 - b.x0), d: round(b.z1 - b.z0), material: 'tre', color: '#c8a57a' }],
-    walls: [wallAt(b.x0, b.z1, b.x1, b.z1, like), wallAt(b.x1, b.z1, b.x1, b.z0, like), wallAt(b.x1, b.z0, b.x0, b.z0, like), wallAt(b.x0, b.z0, b.x0, b.z1, like)] };
+  // Den nye etasjen får samme grunnflate som etasjen under, med yttervegger rundt.
+  const below = S.house.floors.at(-1), b = bounds(below) || { x0: 0, x1: 6, z0: 0, z1: 5 }, src = below.rooms.length ? below.rooms : [{ x: b.x0, z: b.z0, w: b.x1 - b.x0, d: b.z1 - b.z0 }];
+  const f = { id: uid('f'), name: `${S.house.floors.length + 1}. etasje`, height: 2.4, furniture: [], walls: [],
+    rooms: rects(src).map(p => ({ id: uid('r'), name: 'Rom', x: p.x0, z: p.z0, w: round(p.x1 - p.x0), d: round(p.z1 - p.z0), material: 'tre', color: '#c8a57a' })) };
+  closeRim(f, below.walls);
   edit(() => S.house.floors.push(f)); S.floor = S.house.floors.length - 1; S.sheet = null; draw(); ui();
 }
 function removeFloor() {
@@ -273,8 +281,8 @@ cv.addEventListener('pointermove', e => {
   edit(() => {
     if (f.kind === 'furniture') { it.x = round(it.x + dx); it.z = round(it.z + dz); }
     else if (f.kind === 'room') reshapeRoom(f.floor, it, { x: it.x + dx, z: it.z + dz });
-    else if (f.kind === 'wall') { it.x1 = round(it.x1 + dx); it.x2 = round(it.x2 + dx); it.z1 = round(it.z1 + dz); it.z2 = round(it.z2 + dz); }
-    else if (f.kind === 'opening') { const w = f.wall, L = wallLength(w) || 1; it.pos = round(Math.min(L, Math.max(0, it.pos + (dx * (w.x2 - w.x1) + dz * (w.z2 - w.z1)) / L))); }
+    else if (f.kind === 'wall') moveWall(f.floor, it, dx, dz);
+    else if (f.kind === 'opening') { const w = f.wall, L = wallLength(w) || 1; it.pos = round(it.pos + (dx * (w.x2 - w.x1) + dz * (w.z2 - w.z1)) / L); fitOpening(f); }
   }, false);
   ui();
 });

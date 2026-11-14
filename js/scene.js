@@ -1,7 +1,7 @@
 // Tegner husets JSON som Three.js-objekter. Hvert rom, vegg, åpning og møbel er et eget objekt med userData.id.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { MATERIALS, bounds } from './house.js';
+import { MATERIALS, bounds, rects } from './house.js';
 
 const PATTERNS = { // 256 px = 1 m, lyse mønstre som fargen ganges inn i
   tre(x) { for (let r = 0; r < 8; r++) { x.fillStyle = `hsl(0 0% ${88 + (r * 37 % 5) * 3}%)`; x.fillRect(0, r * 32, 256, 32); line(x, 0, r * 32, 256, r * 32); const j = r * 97 % 256; line(x, j, r * 32, j, r * 32 + 32); } },
@@ -80,9 +80,9 @@ function buildWall(w, H, [e1, e2] = [0, 0]) {
     const a = Math.max(at, o.pos - o.width / 2), b = Math.min(end, o.pos + o.width / 2), top = Math.min(H, o.sill + o.height);
     if (b <= a) continue;
     solid(at, a, 0, H); solid(a, b, 0, o.sill); solid(a, b, top, H); at = b;
-    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - o.sill, f = .06, fm = mat('maling', o.color);
+    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - o.sill, f = .06, fm = mat(o.material || 'maling', o.color);
     og.position.set((a + b) / 2, o.sill, 0);
-    if (o.type === 'door') { box(og, ww, hh, .05, 0, 0, 0, mat('tre', o.color)); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
+    if (o.type === 'door') { box(og, ww, hh, .05, 0, 0, 0, mat(o.material || 'tre', o.color)); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
     else {
       box(og, ww, hh, .02, 0, 0, 0, mat('glass', '#bcd7e6'));
       box(og, ww, f, t + .02, 0, 0, 0, fm); box(og, ww, f, t + .02, 0, hh - f, 0, fm);
@@ -115,26 +115,6 @@ function buildFurniture(f) {
   for (const [w, h, d, x, y, z, c] of (PARTS[f.type] || ((w, d, h) => [[w, h, d, 0, 0, 0]]))(f.w, f.d, f.h))
     box(g, w, h, d, x, y, z, c === 'glass' ? mat('glass', '#bcd7e6') : mat(f.material, typeof c === 'string' ? c : c ? shade(f.color, c) : f.color));
   return g;
-}
-// Flaten som dekkes av rom (minus «minus»), delt i rektangler som ikke overlapper, størst først.
-function rects(rooms, minus = []) {
-  const u = v => [...new Set(v)].sort((a, b) => a - b), all = [...rooms, ...minus], hit = (l, x, z) => l.some(r => x > r.x && x < r.x + r.w && z > r.z && z < r.z + r.d);
-  const xs = u(all.flatMap(r => [r.x, r.x + r.w])), zs = u(all.flatMap(r => [r.z, r.z + r.d])), nx = xs.length - 1, nz = zs.length - 1, out = [];
-  const full = Array.from({ length: nx }, (_, i) => Array.from({ length: nz }, (_, j) => { const x = (xs[i] + xs[i + 1]) / 2, z = (zs[j] + zs[j + 1]) / 2; return hit(rooms, x, z) && !hit(minus, x, z); }));
-  for (;;) {
-    let best = null;
-    for (let i0 = 0; i0 < nx; i0++) for (let j0 = 0; j0 < nz; j0++) {
-      let jm = nz - 1;
-      for (let i1 = i0; i1 < nx && full[i1][j0]; i1++) {
-        let j = j0; while (j < jm && full[i1][j + 1]) j++; jm = j;
-        const area = (xs[i1 + 1] - xs[i0]) * (zs[jm + 1] - zs[j0]);
-        if (!best || area > best.area + 1e-6) best = { area, i0, i1, j0, j1: jm };
-      }
-    }
-    if (!best) return out;
-    for (let i = best.i0; i <= best.i1; i++) for (let j = best.j0; j <= best.j1; j++) full[i][j] = false;
-    out.push({ x0: xs[best.i0], x1: xs[best.i1 + 1], z0: zs[best.j0], z1: zs[best.j1 + 1] });
-  }
 }
 // Tak, himling og lokk. Øverste etasje får himling og tak etter grunnflaten: den største rektangelen er hovedtaket med mønet langs
 // lengste side, og hver fløy får sitt eget tak som går inn i taket den står inntil. Deler av lavere etasjer som ikke har noe over seg, får flatt lokk.
