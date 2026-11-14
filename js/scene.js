@@ -137,9 +137,9 @@ function buildWall(w, H, ends = [[0, 0], [0, 0]], y0 = 0) {
     const a = Math.max(at, o.pos - o.width / 2, .02), b = Math.min(L - .02, o.pos + o.width / 2), top = Math.min(H - .02, o.sill + o.height);
     if (b - a < .05 || top - o.sill < .05) continue;
     solid(at, a, y0, H); solid(a, b, y0, o.sill); solid(a, b, top, H); at = b;
-    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - o.sill, f = .06, fm = mat('maling', o.color);
+    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - o.sill, f = .06, fm = mat(o.material || 'maling', o.color);
     og.position.set((a + b) / 2, o.sill, 0);
-    if (o.type === 'door') { box(og, ww - .01, hh - .005, .05, 0, 0, 0, mat('tre', o.color)); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
+    if (o.type === 'door') { box(og, ww - .01, hh - .005, .05, 0, 0, 0, mat(o.material || 'tre', o.color)); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
     else {
       box(og, ww - .01, hh - .01, .02, 0, .005, 0, mat('glass', '#bcd7e6'));
       box(og, ww - .004, f, t + .02, 0, .002, 0, fm); box(og, ww - .004, f, t + .02, 0, hh - f - .002, 0, fm);
@@ -337,7 +337,8 @@ export function createView(canvas) {
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.setViewOffset(w, h, inset[0] / 2, inset[1] / 2, w, h); invalidate();
+    camera.aspect = w / h; camera.setViewOffset(w, h, inset[0] / 2, inset[1] / 2, w, h);
+    renderer.render(scene, camera); dirty = false; // tegn med en gang, så lerretet aldri vises tomt etter at størrelsen endres
   }
   // Flytter bildet så huset står midt i den delen av skjermen som panelet ikke dekker.
   function setInset(right, bottom) { if (right === inset[0] && bottom === inset[1]) return; inset = [right, bottom]; resize(); }
@@ -386,12 +387,13 @@ export function createView(canvas) {
     });
     invalidate();
   }
-  function frame() {
+  // Rammer inn huset. top = bratt vinkel ovenfra (etasjevisning), så veggene ikke skjuler møblene.
+  function frame(top = false) {
     if (walk.on) return;
     const b = new THREE.Box3().setFromObject(root); if (b.isEmpty()) b.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 2, 2));
     const c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
     const dist = r / Math.sin(camera.fov * Math.PI / 360) * (camera.aspect < 1 ? 1.15 / camera.aspect ** .6 : 1.05);
-    controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(.45, .75, .8).normalize().multiplyScalar(dist));
+    controls.target.copy(c); camera.position.copy(c).add((top ? new THREE.Vector3(.1, 1, .2) : new THREE.Vector3(.45, .75, .8)).normalize().multiplyScalar(dist * (top ? .9 : 1)));
     sun.target.position.copy(c); sun.position.copy(c).add(new THREE.Vector3(-9, 16, 7)); controls.update(); invalidate();
   }
   // Interiørmodus: kameraet står i øyehøyde og styres med look() og go(). pos.walls = veggstykkene du ikke kan gå gjennom.

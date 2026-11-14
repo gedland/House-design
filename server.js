@@ -34,7 +34,7 @@ const SCHEMA = obj({
       name: T, height: say('Meter fra gulv til gulv i etasjen over. Øverste etasje: vegghøyde opp til takfoten', N),
       rooms: list(obj({ name: T, x: N, z: N, w: N, d: N, material: MAT, color: COLOR })),
       walls: list(obj({ x1: N, z1: N, x2: N, z2: N, thickness: N, exterior: say('true for yttervegger', { type: 'boolean' }), material: MAT, color: COLOR,
-        openings: list(obj({ type: one(['door', 'window']), pos: say('Meter langs veggen fra (x1, z1) til midten av åpningen', N), width: N, height: N, sill: N, color: COLOR })) })),
+        openings: list(obj({ type: one(['door', 'window']), pos: say('Meter langs veggen fra (x1, z1) til midten av åpningen', N), width: N, height: N, sill: N, material: say('Dørbladet eller vinduskarmen', MAT), color: COLOR })) })),
       furniture: list(obj({ type: one(FURNITURE), x: N, z: N, rot: say('0: baksiden mot z = 0. 90: mot x = 0 (venstre). 180: mot forsiden. -90: mot høyre', N), w: N, d: N, h: N, material: MAT, color: COLOR })),
     })),
     roof: obj({ type: one(['gable', 'hip', 'flat']), pitch: N, overhang: N, material: MAT, color: COLOR }),
