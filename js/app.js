@@ -206,9 +206,10 @@ function sheet(name) { S.sheet = name; S.sel = null; S.move = false; S.placing =
 // Interiørmodus
 function enter() {
   const i = S.floor ?? 0, f = S.house.floors[i], r = [...f.rooms].sort((a, b) => b.w * b.d - a.w * a.d)[0], b = bounds(f);
-  const x = r ? r.x + r.w / 2 : b ? (b.x0 + b.x1) / 2 : 0, z = r ? r.z + r.d / 2 : b ? (b.z0 + b.z1) / 2 : 0;
+  // Start i den ene enden av det største rommet, med blikket langs rommet.
+  const long = r && r.w >= r.d, x = r ? r.x + r.w * (long ? .2 : .5) : b ? (b.x0 + b.x1) / 2 : 0, z = r ? r.z + r.d * (long ? .5 : .8) : b ? (b.z0 + b.z1) / 2 : 0;
   S.walk = { floor: i }; S.sheet = null; S.placing = null;
-  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: 0 }); select(null);
+  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: long ? -Math.PI / 2 : 0 }); select(null);
 }
 const eye = i => S.house.floors.slice(0, i).reduce((s, f) => s + f.height, 0) + Math.min(1.6, S.house.floors[i].height - .3);
 function leave() { S.walk = null; stick(0, 0); view.setWalk(null); draw(); ui(); }
@@ -245,7 +246,7 @@ function showFloor(i) { S.floor = i; const f = S.sel && find(S.house, S.sel); if
 // Pek og dra: trykk velger et objekt. Med «Flytt» på flytter dra det valgte objektet, ellers styrer dra kameraet.
 const cv = $('#view'); let down = null;
 cv.addEventListener('pointerdown', e => {
-  if (!e.isPrimary) return;
+  if (down && !e.isPrimary) { down.far = true; return; } // en finger til (knip for å zoome) er ikke et trykk
   down = { x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, id: e.pointerId, far: false };
   const f = S.move && S.sel && find(S.house, S.sel), p = f && view.planePoint(e, f.y);
   if (p) { down.drag = { y: f.y, x: p.x, z: p.z, ax: 0, az: 0 }; view.controls.enabled = false; }
