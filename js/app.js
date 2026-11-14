@@ -7,7 +7,7 @@ const btn = (textContent, onclick, p = {}) => h('button', { type: 'button', text
 const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
-const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], ai: false, busy: false, note: '' };
+const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], ai: false, busy: false, note: '', report: null };
 let view;
 try { view = createView($('#view')); }
 catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
@@ -160,6 +160,8 @@ async function analyze() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || `Serveren svarte med feil ${r.status}.`);
     S.busy = false; S.note = ''; S.photos = []; replace(normalize(j.house));
+    // Serveren har kontrollert modellen før den tegnes. Alt den rettet eller ikke fikk rettet, vises her.
+    const rep = j.report; if (rep?.fixed?.length || rep?.problems?.length) { S.report = rep; S.sheet = 'report'; ui(); }
   } catch (e) { S.busy = false; say(e instanceof TypeError ? 'Fikk ikke kontakt med serveren.' : e.message); }
 }
 function photoSheet() {
@@ -171,6 +173,14 @@ function photoSheet() {
       n < 30 && h('label', { className: 'pick' }, file, '+ Bilder')),
     S.ai ? btn(S.busy ? 'Arbeider …' : n < 5 ? `Velg minst 5 bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: S.busy || n < 5 })
       : btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })];
+}
+
+function reportSheet() {
+  const { fixed = [], problems = [] } = S.report || {}, items = a => h('ul', { className: 'report' }, a.map(t => h('li', { textContent: t })));
+  return [head('Fra bilder til 3D', 'Kontroll av modellen', () => sheet(null)),
+    h('p', { className: 'hint', textContent: 'Modellen ble kontrollert før den ble tegnet. Målene er anslag, så se over huset og rett det som ikke stemmer.' }),
+    problems.length > 0 && h('h3', { textContent: 'Må ses over' }), problems.length > 0 && items(problems),
+    fixed.length > 0 && h('h3', { textContent: 'Rettet automatisk' }), fixed.length > 0 && items(fixed)];
 }
 
 // Eksport og import
@@ -228,7 +238,7 @@ function keyMove() { const k = (...c) => c.some(x => keys.has(x)) ? 1 : 0; stick
 // Tegner hele grensesnittet ut fra tilstanden
 function ui() {
   const el = $('#panel'), f = S.sel && find(S.house, S.sel);
-  const content = f ? selectionPanel(f) : S.sheet === 'add' ? addSheet() : S.sheet === 'photos' ? photoSheet() : S.sheet === 'more' ? moreSheet() : null;
+  const content = f ? selectionPanel(f) : S.sheet === 'add' ? addSheet() : S.sheet === 'photos' ? photoSheet() : S.sheet === 'more' ? moreSheet() : S.sheet === 'report' && S.report ? reportSheet() : null;
   const banner = S.placing ? `Trykk på veggen der ${S.placing === 'door' ? 'døren' : 'vinduet'} skal stå.` : !content && S.note;
   document.body.className = [content && 'has-panel', f && S.move && 'moving', S.walk && 'walk', (S.placing || banner) && 'has-banner', localStorage.tipSeen && 'seen'].filter(Boolean).join(' ');
   el.replaceChildren(...(content || []).filter(Boolean), ...(content && S.note ? [h('p', { className: 'note', role: 'status', textContent: S.note })] : []));

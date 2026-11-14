@@ -1,6 +1,7 @@
 {
   "name": "husform",
   "private": true,
+  "type": "module",
   "description": "Bilder av ett hus inn, redigerbar 3D-modell ut.",
   "scripts": { "start": "node server.js" },
   "engines": { "node": ">=18" },

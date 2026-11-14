@@ -88,6 +88,7 @@ h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: -4px
 .photos button, .pick { aspect-ratio: 1; padding: 0; overflow: hidden; }
 .photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pick { display: grid; place-items: center; text-align: center; font-size: 13px; color: var(--muted); border-style: dashed; cursor: pointer; }
+.report { display: grid; gap: 6px; padding-left: 18px; font-size: 14.5px; }
 .note { font-size: 14px; padding: 10px 12px; background: var(--tint); border-radius: 10px; }
 
 @media (hover: hover) { header button:hover, #bar button:hover, .tile:hover, .list > *:hover, .acts button:not([aria-pressed=true]):hover, .icon:hover { background: var(--well); } }
