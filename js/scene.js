@@ -85,9 +85,9 @@ function buildWall(w, H, [e0, e1] = [0, 0], base = 0) {
     const a = Math.max(at, o.pos - o.width / 2), b = Math.min(end, o.pos + o.width / 2), sill = Math.min(o.sill, H - .3), top = Math.min(H, sill + o.height);
     if (b - a < .05) continue;
     solid(at, a, -base, H); solid(a, b, sill ? -base : 0, sill); solid(a, b, top, H); at = b;
-    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - sill, f = .06, fm = mat('maling', o.color);
+    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - sill, f = .06, fm = mat(o.material, o.color);
     og.position.set((a + b) / 2, sill, 0);
-    if (o.type === 'door') { box(og, ww, hh, .05, 0, 0, 0, mat('tre', o.color)); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
+    if (o.type === 'door') { box(og, ww, hh, .05, 0, 0, 0, fm); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
     else {
       box(og, ww - f, hh - f, .02, 0, f / 2, 0, mat('glass', '#bcd7e6'));
       box(og, ww, f, t + .02, 0, 0, 0, fm); box(og, ww, f, t + .02, 0, hh - f, 0, fm);
@@ -327,6 +327,7 @@ export function createView(canvas) {
     }
     const roof = buildRoof(house, floor); if (roof) root.add(roof);
     root.traverse(o => { if (o.userData.id) byId[o.userData.id] = o; });
+    root.updateMatrixWorld(true); // så et trykk treffer riktig også før neste bilde er tegnet
     invalidate();
   }
   function select(id) {

@@ -1,4 +1,4 @@
-import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom } from './house.js';
+import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, setWallLength, moveWall, reshapeRoom, removeRoom } from './house.js';
 import { createView } from './scene.js';
 
 const $ = s => document.querySelector(s);
@@ -46,7 +46,7 @@ const colorF = (label = 'Farge') => ({ key: 'color', label, type: 'color' }), ma
 const FIELDS = {
   room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1.8), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   wall: [colorF(), matF(), num('length', 'Lengde (m)', .2), num('angle', 'Retning (°)', -360, 15), num('thickness', 'Tykkelse (m)', .05, .01)],
-  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
+  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), matF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
   furniture: [{ key: 'type', label: 'Type', type: 'select', options: opts(FURNITURE) }, colorF(), matF(), num('w', 'Bredde (m)', .1), num('d', 'Dybde (m)', .1), num('h', 'Høyde (m)', .1), num('rot', 'Rotasjon (°)', -360, 15), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   roof: [{ key: 'type', label: 'Takform', type: 'select', options: opts(ROOFS) }, colorF(), matF(), num('pitch', 'Takvinkel (°)', 5, 1), num('overhang', 'Takutstikk (m)')],
 };
@@ -59,12 +59,16 @@ function getValue(f, key) {
   return f.item[key];
 }
 function setValue(f, key, v) {
-  if (f.kind === 'wall' && key === 'length') setWall(f.item, v, wallAngle(f.item));
+  if (f.kind === 'wall' && key === 'length') setWallLength(f.floor, f.item, v);
   else if (f.kind === 'wall' && key === 'angle') setWall(f.item, wallLength(f.item), v);
   else if (f.kind === 'room' && key === 'height') f.floor.height = v;
   else if (f.kind === 'room' && 'xzwd'.includes(key)) reshapeRoom(f.floor, f.item, { [key]: v });
+  else if (key === 'type' && f.kind === 'opening') { const { label, width, color, ...d } = OPENINGS[v]; Object.assign(f.item, { type: v, ...d }); } // dør ↔ vindu: høyde, brystning og materiale følger typen
+  else if (key === 'type' && f.kind === 'furniture') { const { label, ...d } = FURNITURE[v]; Object.assign(f.item, { type: v, ...d }); }
+  else if (key === 'pos' && f.kind === 'opening') f.item.pos = clampPos(f.wall, f.item, v);
   else f.item[key] = v;
 }
+const clampPos = (wall, o, pos) => { const L = wallLength(wall), half = Math.min(o.width, L) / 2; return round(Math.min(L - half, Math.max(half, pos))); };
 const head = (small, big, close) => h('div', { className: 'head' }, h('div', {}, small && h('small', { textContent: small }), h('h2', { textContent: big })), btn('✕', close, { className: 'icon', ariaLabel: 'Lukk' }));
 function selectionPanel(f) {
   const fields = FIELDS[f.kind].map(d => {
@@ -76,9 +80,9 @@ function selectionPanel(f) {
       let val = input.value;
       if (d.type === 'number') { val = parseFloat(val); if (!isFinite(val) || val < d.min) return; }
       edit(() => setValue(find(S.house, S.sel), d.key, val), false);
-      if (d.key === 'name' || d.key === 'type') $('#panel h2').textContent = title(find(S.house, S.sel));
+      if (d.key === 'type') { commit(); ui(); } else if (d.key === 'name') $('#panel h2').textContent = title(find(S.house, S.sel));
     };
-    input.onchange = commit;
+    input.onchange = () => { commit(); const f = find(S.house, S.sel); if (f && d.type === 'number') input.value = getValue(f, d.key); }; // viser verdien som faktisk ble brukt
     return h('label', { className: d.wide ? 'wide' : '' }, h('span', { textContent: d.label }), input);
   });
   return [head(KIND[f.kind], title(f), () => select(null)),
@@ -90,7 +94,7 @@ function selectionPanel(f) {
 }
 function remove() {
   const f = find(S.house, S.sel); if (!f) return;
-  edit(() => { if (f.kind === 'roof') S.house.roof = null; else f.list.splice(f.list.indexOf(f.item), 1); }); select(null);
+  edit(() => { if (f.kind === 'roof') S.house.roof = null; else if (f.kind === 'room') removeRoom(f.floor, f.item); else f.list.splice(f.list.indexOf(f.item), 1); }); select(null);
 }
 
 // Legg til nye objekter. De havner midt i bildet, på etasjen som vises.
@@ -264,8 +268,8 @@ cv.addEventListener('pointermove', e => {
   edit(() => {
     if (f.kind === 'furniture') { it.x = round(it.x + dx); it.z = round(it.z + dz); }
     else if (f.kind === 'room') reshapeRoom(f.floor, it, { x: it.x + dx, z: it.z + dz });
-    else if (f.kind === 'wall') { it.x1 = round(it.x1 + dx); it.x2 = round(it.x2 + dx); it.z1 = round(it.z1 + dz); it.z2 = round(it.z2 + dz); }
-    else if (f.kind === 'opening') { const w = f.wall, L = wallLength(w) || 1; it.pos = round(Math.min(L, Math.max(0, it.pos + (dx * (w.x2 - w.x1) + dz * (w.z2 - w.z1)) / L))); }
+    else if (f.kind === 'wall') moveWall(f.floor, it, dx, dz);
+    else if (f.kind === 'opening') { const w = f.wall, L = wallLength(w) || 1; it.pos = clampPos(w, it, it.pos + (dx * (w.x2 - w.x1) + dz * (w.z2 - w.z1)) / L); }
   }, false);
   ui();
 });
@@ -276,6 +280,8 @@ const up = e => {
   else if (e.type === 'pointerup' && !d.far) { const hit = view.pick(e); if (S.placing) placeOn(hit); else if (S.sheet && !hit) sheet(null); else select(hit?.id); }
 };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+// Uten dette sender nettleseren et ekstra klikk etter et trykk, og det treffer knappen i panelet som nettopp åpnet seg under fingeren.
+cv.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
 $('#undo').onclick = () => {
   const s = S.undo.pop(); if (!s) return;
