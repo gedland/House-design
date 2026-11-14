@@ -16,13 +16,14 @@ catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebG
 const DB = new Promise((ok, no) => { const r = indexedDB.open('husform', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
 const db = (mode, fn) => DB.then(d => new Promise((ok, no) => { const q = fn(d.transaction('kv', mode).objectStore('kv')); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); })).catch(() => null);
 let saveT;
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => db('readwrite', s => s.put(S.house, 'house')), 300); };
+const store = () => { clearTimeout(saveT); saveT = 0; return db('readwrite', s => s.put(S.house, 'house')); };
+const save = () => { clearTimeout(saveT); saveT = setTimeout(store, 300); };
 
 // Alle endringer går gjennom edit(): JSON endres, 3D tegnes på nytt. commit() lagrer og legger et angre-steg.
 let drawT = 0;
 const shown = () => S.walk ? null : S.floor;
 function draw() { if (drawT) return; drawT = requestAnimationFrame(() => { drawT = 0; view.build(S.house, { floor: shown() }); view.select(S.sel); }); }
-function edit(fn, done = true) { S.pending ??= JSON.stringify(S.house); fn(); draw(); if (done) commit(); }
+function edit(fn, done = true) { S.pending ??= JSON.stringify(S.house); fn(); draw(); if (done) commit(); else save(); }
 function commit() {
   if (S.pending && S.pending !== JSON.stringify(S.house)) { S.undo.push(S.pending); if (S.undo.length > 50) S.undo.shift(); save(); }
   S.pending = null; $('#undo').disabled = !S.undo.length;
@@ -314,6 +315,9 @@ addEventListener('keyup', e => { if (keys.delete(e.key.toLowerCase())) keyMove()
 addEventListener('blur', () => { keys.clear(); if (S.walk) stick(0, 0); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { document.documentElement.dataset.theme = e.matches ? 'dark' : 'light'; view.theme(); });
 matchMedia('(min-width: 760px)').addEventListener('change', ui);
+// Lukkes eller skjules appen midt i en endring, lagres den med en gang.
+const flush = () => { commit(); if (saveT) store(); };
+addEventListener('pagehide', flush); document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 
 fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; if (S.sheet === 'photos') ui(); }).catch(() => {});
 db('readonly', s => s.get('house')).then(saved => {
