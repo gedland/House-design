@@ -63,10 +63,10 @@ const DEMO_RAW = {
     ],
     furniture: [
       item('sofa', 2.75, 3.4, 180), item('bord', 2.75, 2.2), item('tv', 2.75, .35), item('plante', .5, .5), item('lampe', 5, 3.5),
-      item('kjokken', 7.4, .45, 0, { w: 2.8 }), item('bord', 7.4, 2.6, 0, { w: 1.4, d: .8, h: .75 }), item('stol', 6.4, 2.6, 90), item('stol', 8.4, 2.6, -90),
-      item('seng', 7.9, 5.6, -90), item('skap', 5.85, 6.2, 90, { w: 1.2 }),
-      item('toalett', .5, 6.4, 90), item('vask', 1.6, 4.35), item('dusj', 2.45, 6.45),
-      item('skap', 5.2, 6.2, -90, { w: 1.2, d: .4 }),
+      item('kjokken', 7.4, .45, 0, { w: 2.8 }), item('bord', 7.4, 2.6, 0, { w: 1.4, d: .8, h: .75 }), item('stol', 6.4, 2.6, -90), item('stol', 8.4, 2.6, 90),
+      item('seng', 7.9, 5.6, 90), item('skap', 5.85, 6.2, -90, { w: 1.2 }),
+      item('toalett', .5, 6.4, -90), item('vask', 1.6, 4.35), item('dusj', 2.45, 6.45),
+      item('skap', 5.2, 6.2, 90, { w: 1.2, d: .4 }),
     ],
   }],
   roof: { type: 'gable', pitch: 30, overhang: .4, material: 'takstein', color: '#3a3a3c' },
@@ -116,6 +116,14 @@ export const wallAngle = w => Math.round(Math.atan2(w.z2 - w.z1, w.x2 - w.x1) * 
 export function setWall(w, len, deg) {
   const L = Math.max(.2, len), a = deg * Math.PI / 180;
   w.x2 = round(w.x1 + Math.cos(a) * L); w.z2 = round(w.z1 + Math.sin(a) * L);
+}
+// Interiørmodus: sant når (x, z) er så nær en vegg at man ikke kan stå der. Døråpninger er frie, vinduer er det ikke.
+export function blocked(floor, x, z, r = .25) {
+  return floor.walls.some(w => {
+    const L = wallLength(w); if (!L) return false;
+    const ux = (w.x2 - w.x1) / L, uz = (w.z2 - w.z1) / L, t = (x - w.x1) * ux + (z - w.z1) * uz, off = Math.abs((x - w.x1) * uz - (z - w.z1) * ux);
+    return off < w.thickness / 2 + r && t > -r && t < L + r && !w.openings.some(o => o.type === 'door' && Math.abs(t - o.pos) < o.width / 2 - .1);
+  });
 }
 // Ytterkanten av en etasje (vegger og rom), eller null når etasjen er tom.
 export function bounds(floor) {

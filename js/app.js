@@ -1,4 +1,4 @@
-import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom } from './house.js';
+import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom, blocked } from './house.js';
 import { createView } from './scene.js';
 
 const $ = s => document.querySelector(s);
@@ -218,7 +218,7 @@ function enter() {
   const i = S.floor ?? 0, f = S.house.floors[i], r = [...f.rooms].sort((a, b) => b.w * b.d - a.w * a.d)[0], b = bounds(f);
   const x = r ? r.x + r.w / 2 : b ? (b.x0 + b.x1) / 2 : 0, z = r ? r.z + r.d / 2 : b ? (b.z0 + b.z1) / 2 : 0;
   S.walk = { floor: i }; S.sheet = null; S.placing = null;
-  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: 0 }); select(null);
+  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: 0, hit: (px, pz) => S.walk && blocked(S.house.floors[S.walk.floor], px, pz) }); select(null);
 }
 const eye = i => S.house.floors.slice(0, i).reduce((s, f) => s + f.height, 0) + Math.min(1.6, S.house.floors[i].height - .3);
 function leave() { S.walk = null; stick(0, 0); view.setWalk(null); draw(); ui(); }

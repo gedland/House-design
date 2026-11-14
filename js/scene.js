@@ -49,13 +49,35 @@ function buildRoom(r) {
   box(g, r.w, .15, r.d, r.x + r.w / 2, -.15, r.z + r.d / 2, mat(r.material, r.color));
   return g;
 }
-function buildWall(w, H) {
+// Hvor mye hver veggende skal forlenges (+) eller kortes (−) for at hjørner og T-kryss skal møtes uten at veggene ligger oppå hverandre.
+// I et hjørne går veggen langs x helt ut og den andre butter mot den. I et T-kryss butter stammen mot veggen som går forbi.
+function joins(walls) {
+  const D = walls.map(w => { const L = Math.hypot(w.x2 - w.x1, w.z2 - w.z1) || 1; return [(w.x2 - w.x1) / L, (w.z2 - w.z1) / L, L]; }), e = .03;
+  const on = (j, px, pz) => { const o = walls[j], [ox, oz, L] = D[j], t = (px - o.x1) * ox + (pz - o.z1) * oz; return Math.abs((px - o.x1) * oz - (pz - o.z1) * ox) > e || t < -e || t > L + e ? 0 : t < e || t > L - e ? 1 : 2; }; // 1 = i enden, 2 = midt på
+  const dot = (i, j) => Math.abs(D[i][0] * D[j][0] + D[i][1] * D[j][1]), xish = i => Math.abs(D[i][0]) > Math.abs(D[i][1]);
+  const partner = (j, px, pz, not) => walls.some((_, k) => k !== j && k !== not && dot(j, k) > .99 && on(k, px, pz) === 1);
+  return walls.map((w, i) => [[w.x1, w.z1], [w.x2, w.z2]].map(([px, pz]) => {
+    let pass = 0, col = false, skew = false; const ends = [];
+    walls.forEach((o, j) => {
+      const at = j === i ? 0 : on(j, px, pz); if (!at) return;
+      const d = dot(i, j);
+      if (d > .99) { if (at === 1) col = true; } else if (d > .1) skew = true;
+      else if (at === 2 || partner(j, px, pz, i)) pass = Math.max(pass, o.thickness / 2); else ends.push(j);
+    });
+    if (pass) return -pass;
+    if (!ends.length) return skew ? w.thickness / 2 : 0;
+    if (col) return 0;
+    const j = ends[0], t = walls[j].thickness / 2;
+    return (xish(i) !== xish(j) ? xish(i) : i < j) ? t : -t;
+  }));
+}
+function buildWall(w, H, [e1, e2] = [0, 0]) {
   const g = tag(new THREE.Group(), w.id, 'wall', 'Vegg'), dx = w.x2 - w.x1, dz = w.z2 - w.z1, L = Math.hypot(dx, dz), t = w.thickness, m = mat(w.material, w.color);
   g.position.set(w.x1, 0, w.z1); g.rotation.y = -Math.atan2(dz, dx);
-  let at = -t / 2; // forlenges en halv tykkelse i hver ende så hjørnene lukkes
+  const end = L + e2; let at = -e1;
   const solid = (a, b, y0, y1) => box(g, b - a, y1 - y0, t, (a + b) / 2, y0, 0, m);
   for (const o of [...(w.openings || [])].sort((a, b) => a.pos - b.pos)) {
-    const a = Math.max(at, o.pos - o.width / 2), b = Math.min(L + t / 2, o.pos + o.width / 2), top = Math.min(H, o.sill + o.height);
+    const a = Math.max(at, o.pos - o.width / 2), b = Math.min(end, o.pos + o.width / 2), top = Math.min(H, o.sill + o.height);
     if (b <= a) continue;
     solid(at, a, 0, H); solid(a, b, 0, o.sill); solid(a, b, top, H); at = b;
     const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - o.sill, f = .06, fm = mat('maling', o.color);
@@ -69,7 +91,7 @@ function buildWall(w, H) {
     }
     g.add(og);
   }
-  solid(at, L + t / 2, 0, H);
+  solid(at, end, 0, H);
   return g;
 }
 const PARTS = { // deler: [w, h, d, x, y, z, fargefaktor eller fast farge]
@@ -94,37 +116,72 @@ function buildFurniture(f) {
     box(g, w, h, d, x, y, z, c === 'glass' ? mat('glass', '#bcd7e6') : mat(f.material, typeof c === 'string' ? c : c ? shade(f.color, c) : f.color));
   return g;
 }
-// Tak og himling over øverste etasje. Mønet går langs husets lengste side.
-function buildRoof(house, y) {
-  const r = house.roof, top = house.floors.at(-1), b = r && top && bounds(top); if (!b) return null;
-  const g = tag(new THREE.Group(), 'roof', 'roof', 'Tak'), W = b.x1 - b.x0, D = b.z1 - b.z0, o = r.overhang, m = mat(r.material, r.color);
-  g.position.set((b.x0 + b.x1) / 2, y, (b.z0 + b.z1) / 2);
-  box(g, W, .1, D, 0, 0, 0, mat('maling', '#f4f2ec'));
-  if (r.type === 'flat') { box(g, W + o * 2, .2, D + o * 2, 0, .1, 0, m); return g; }
-  const s = new THREE.Group(); s.position.y = .1; g.add(s);
-  const alongX = W >= D, L = alongX ? W : D, S = alongX ? D : W, a = r.pitch * Math.PI / 180, ez = S / 2 + o, ex = L / 2 + o, rise = ez * Math.tan(a), t = .12;
-  if (!alongX) s.rotation.y = Math.PI / 2;
-  if (r.type === 'hip') {
-    const rl = Math.max(0, ex - ez), A = [-ex, 0, -ez], B = [ex, 0, -ez], C = [ex, 0, ez], Dd = [-ex, 0, ez], R1 = [-rl, rise, 0], R2 = [rl, rise, 0];
-    const tris = [[Dd, C, R2], [Dd, R2, R1], [B, A, R1], [B, R1, R2], [C, B, R2], [A, Dd, R1]], side = [0, 0, 0, 0, 1, 1], k = 1 / Math.sin(a);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(2), 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(tris.flatMap((tr, i) => tr.flatMap(v => [side[i] ? v[2] : v[0], v[1] * k])), 2));
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; s.add(mesh);
-    box(s, ex * 2, .04, ez * 2, 0, -.04, 0, m);
-    return g;
+// Flaten som dekkes av rom (minus «minus»), delt i rektangler som ikke overlapper, størst først.
+function rects(rooms, minus = []) {
+  const u = v => [...new Set(v)].sort((a, b) => a - b), all = [...rooms, ...minus], hit = (l, x, z) => l.some(r => x > r.x && x < r.x + r.w && z > r.z && z < r.z + r.d);
+  const xs = u(all.flatMap(r => [r.x, r.x + r.w])), zs = u(all.flatMap(r => [r.z, r.z + r.d])), nx = xs.length - 1, nz = zs.length - 1, out = [];
+  const full = Array.from({ length: nx }, (_, i) => Array.from({ length: nz }, (_, j) => { const x = (xs[i] + xs[i + 1]) / 2, z = (zs[j] + zs[j + 1]) / 2; return hit(rooms, x, z) && !hit(minus, x, z); }));
+  for (;;) {
+    let best = null;
+    for (let i0 = 0; i0 < nx; i0++) for (let j0 = 0; j0 < nz; j0++) {
+      let jm = nz - 1;
+      for (let i1 = i0; i1 < nx && full[i1][j0]; i1++) {
+        let j = j0; while (j < jm && full[i1][j + 1]) j++; jm = j;
+        const area = (xs[i1 + 1] - xs[i0]) * (zs[jm + 1] - zs[j0]);
+        if (!best || area > best.area + 1e-6) best = { area, i0, i1, j0, j1: jm };
+      }
+    }
+    if (!best) return out;
+    for (let i = best.i0; i <= best.i1; i++) for (let j = best.j0; j <= best.j1; j++) full[i][j] = false;
+    out.push({ x0: xs[best.i0], x1: xs[best.i1 + 1], z0: zs[best.j0], z1: zs[best.j1 + 1] });
   }
-  const slope = ez / Math.cos(a);
-  for (const k of [1, -1]) {
-    const p = box(s, ex * 2, t, slope, 0, 0, 0, m);
-    p.rotation.x = k * a; p.position.set(0, rise / 2 + t / 2, k * ez / 2);
-  }
-  const tri = new THREE.Shape([new THREE.Vector2(-S / 2, 0), new THREE.Vector2(S / 2, 0), new THREE.Vector2(0, S / 2 * Math.tan(a))]), w0 = top.walls[0];
-  for (const k of [1, -1]) {
-    const e = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: .2, bevelEnabled: false }), mat(w0?.material || 'panel', w0?.color || '#e9e4d8'));
-    e.rotation.y = Math.PI / 2; e.position.set(k * L / 2 - .1, 0, 0); e.castShadow = e.receiveShadow = true; s.add(e);
-  }
+}
+// Tak, himling og lokk. Øverste etasje får himling og tak etter grunnflaten: den største rektangelen er hovedtaket med mønet langs
+// lengste side, og hver fløy får sitt eget tak som går inn i taket den står inntil. Deler av lavere etasjer som ikke har noe over seg, får flatt lokk.
+function buildRoof(house, ys) {
+  const r = house.roof, fl = house.floors, top = fl.at(-1), bb = r && top && bounds(top); if (!bb) return null;
+  const g = tag(new THREE.Group(), 'roof', 'roof', 'Tak'), m = mat(r.material, r.color), Y = ys.at(-1), o = r.overhang, a = r.pitch * Math.PI / 180, t = .12;
+  const flat = (p, y, h, material) => box(g, p.x1 - p.x0, h, p.z1 - p.z0, (p.x0 + p.x1) / 2, y, (p.z0 + p.z1) / 2, material);
+  fl.slice(0, -1).forEach((f, i) => rects(f.rooms, fl[i + 1].rooms).forEach(p => flat(p, ys[i + 1], .12, m)));
+  const area = top.rooms.length ? top.rooms : [{ x: bb.x0, z: bb.z0, w: bb.x1 - bb.x0, d: bb.z1 - bb.z0 }], parts = rects(area), w0 = top.walls[0];
+  for (const p of rects(area)) flat(p, Y - .11, .1, mat('maling', '#f4f2ec'));
+  const wallMat = mat(w0?.material || 'panel', w0?.color || '#e9e4d8'), tw = w0?.thickness || .2, mesh = (geo, material) => { const x = new THREE.Mesh(geo, material); x.castShadow = x.receiveShadow = true; return x; };
+  parts.forEach((p, k) => {
+    // Fløyer: finn siden som ligger inntil et tak som alt er lagt, og hvor langt inn i det taket mønet skal gå.
+    let att = null, ext = 0, len = 0;
+    for (const q of parts.slice(0, k)) for (const [side, touch, lo, hi] of [['x0', q.x1 === p.x0, 'z0', 'z1'], ['x1', q.x0 === p.x1, 'z0', 'z1'], ['z0', q.z1 === p.z0, 'x0', 'x1'], ['z1', q.z0 === p.z1, 'x0', 'x1']]) {
+      const c = Math.min(p[hi], q[hi]) - Math.max(p[lo], q[lo]);
+      if (touch && c > len) { len = c; att = side; ext = (side[0] === 'x' ? q.x1 - q.x0 : q.z1 - q.z0) / 2; }
+    }
+    const W = p.x1 - p.x0, D = p.z1 - p.z0, cx = (p.x0 + p.x1) / 2, cz = (p.z0 + p.z1) / 2, lift = k * .004, oh = side => att === side ? 0 : o;
+    if (r.type === 'flat') return box(g, W + oh('x0') + oh('x1'), .2 + lift, D + oh('z0') + oh('z1'), cx + (oh('x1') - oh('x0')) / 2, Y - lift / 2, cz + (oh('z1') - oh('z0')) / 2, m);
+    const alongX = att ? att[0] === 'x' : W >= D, s = new THREE.Group(); s.position.set(cx, Y + .04, cz); if (!alongX) s.rotation.y = Math.PI / 2; g.add(s);
+    // I s går mønet langs x. Ende A (−x) er x0-siden, eller z1-siden når taket er dreid; ende B er motsatt.
+    const L = alongX ? W : D, S = alongX ? D : W, ez = S / 2 + o, rise = ez * Math.tan(a), inA = att === (alongX ? 'x0' : 'z1'), inB = att === (alongX ? 'x1' : 'z0');
+    const xa = -L / 2 - (inA ? ext : o), xb = L / 2 + (inB ? ext : o), pa = inA ? -L / 2 : xa, pb = inB ? L / 2 : xb;
+    box(s, pb - pa, .04, ez * 2, (pa + pb) / 2, -.04 - lift, 0, m); // plate under takutstikket
+    if (r.type === 'hip') {
+      let ra = inA ? xa : xa + ez, rb = inB ? xb : xb - ez; if (ra > rb) ra = rb = (ra + rb) / 2;
+      const A = [xa, 0, -ez], B = [xb, 0, -ez], C = [xb, 0, ez], Dd = [xa, 0, ez], R1 = [ra, rise, 0], R2 = [rb, rise, 0];
+      const tris = [[Dd, C, R2], [Dd, R2, R1], [B, A, R1], [B, R1, R2], [C, B, R2], [A, Dd, R1]], side = [0, 0, 0, 0, 1, 1], sc = 1 / Math.sin(a);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(2), 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(tris.flatMap((tr, i) => tr.flatMap(v => [side[i] ? v[2] : v[0], v[1] * sc])), 2));
+      geo.computeVertexNormals(); s.add(mesh(geo, m));
+      return;
+    }
+    // Saltak: to plater med undersiden fra takfoten til mønet, og gavltrekanter i veggens plan.
+    const width = ez / Math.cos(a) + t * Math.tan(a), c = (ez / Math.cos(a) - t * Math.tan(a)) / 2;
+    for (const q of [1, -1]) {
+      const pl = box(s, xb - xa, t, width, 0, 0, 0, m);
+      pl.rotation.x = q * a; pl.position.set((xa + xb) / 2, rise - c * Math.sin(a) + Math.cos(a) * t / 2, q * (c * Math.cos(a) + Math.sin(a) * t / 2));
+    }
+    const h1 = o * Math.tan(a), V = (x, y) => new THREE.Vector2(x, y), tri = new THREE.Shape([V(-S / 2, 0), V(S / 2, 0), V(S / 2, h1), V(0, rise), V(-S / 2, h1)]);
+    for (const x of [inA ? xa : -L / 2 - tw / 2, inB ? xb - tw : L / 2 - tw / 2]) {
+      const e = mesh(new THREE.ExtrudeGeometry(tri, { depth: tw, bevelEnabled: false }), wallMat);
+      e.rotation.y = Math.PI / 2; e.position.set(x, 0, 0); s.add(e);
+    }
+  });
   return g;
 }
 
@@ -167,7 +224,10 @@ export function createView(canvas) {
       const [mx, mz] = walk.move;
       if (mx || mz) {
         const s = Math.sin(walk.yaw), c = Math.cos(walk.yaw), v = 2.4 * dt;
-        camera.position.x += (mx * c - mz * s) * v; camera.position.z += (-mx * s - mz * c) * v; dirty = true;
+        const p = camera.position, dx = (mx * c - mz * s) * v, dz = (-mx * s - mz * c) * v, hit = walk.hit;
+        // Vegger stopper deg, men du glir langs dem. Står du alt inne i en vegg, slipper du ut.
+        if (!hit || hit(p.x, p.z) || !hit(p.x + dx, p.z + dz)) { p.x += dx; p.z += dz; } else if (!hit(p.x + dx, p.z)) p.x += dx; else if (!hit(p.x, p.z + dz)) p.z += dz;
+        dirty = true;
       }
       camera.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ');
     }
@@ -177,18 +237,18 @@ export function createView(canvas) {
   // floor = null viser hele huset med tak. Et tall viser etasjene til og med den, uten tak, så du ser ned i rommene.
   function build(house, { floor = null } = {}) {
     root.traverse(o => o.geometry?.dispose()); lit.forEach(m => m.dispose()); lit = []; root.clear(); byId = {};
-    let y = 0;
+    const ys = [0];
     for (const [i, f] of house.floors.entries()) {
       if (floor === null || i <= floor) {
-        const g = new THREE.Group(); g.name = f.name; g.position.y = y;
+        const g = new THREE.Group(), j = joins(f.walls); g.name = f.name; g.position.y = ys[i];
         for (const r of f.rooms) g.add(buildRoom(r));
-        for (const w of f.walls) g.add(buildWall(w, f.height));
+        f.walls.forEach((w, n) => g.add(buildWall(w, f.height, j[n])));
         for (const m of f.furniture) g.add(buildFurniture(m));
         root.add(g);
       }
-      y += f.height;
+      ys.push(ys[i] + f.height);
     }
-    const roof = floor === null && buildRoof(house, y); if (roof) root.add(roof);
+    const roof = floor === null && buildRoof(house, ys); if (roof) root.add(roof);
     root.traverse(o => { if (o.userData.id) byId[o.userData.id] = o; });
     invalidate();
   }
@@ -211,7 +271,7 @@ export function createView(canvas) {
   // Interiørmodus: kameraet står i øyehøyde og styres med se() og gå().
   function setWalk(pos) {
     if (pos && !walk.on) walk.saved = { p: camera.position.clone(), t: controls.target.clone() };
-    walk.on = !!pos; controls.enabled = !pos; fill.intensity = pos ? .9 : 0; camera.fov = pos ? 75 : 50; walk.move = [0, 0];
+    walk.on = !!pos; walk.hit = pos?.hit || (pos ? walk.hit : null); controls.enabled = !pos; fill.intensity = pos ? .9 : 0; camera.fov = pos ? 75 : 50; walk.move = [0, 0];
     if (pos) { camera.position.set(pos.x, pos.y, pos.z); walk.pitch = 0; if (pos.yaw !== undefined) walk.yaw = pos.yaw; }
     else if (walk.saved) { camera.position.copy(walk.saved.p); controls.target.copy(walk.saved.t); controls.update(); }
     resize();
