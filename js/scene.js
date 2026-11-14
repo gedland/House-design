@@ -89,7 +89,7 @@ const PARTS = { // deler: [w, h, d, x, y, z, fargefaktor eller fast farge]
 const legs = (w, d, h, s) => [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => [s, h, s, a * (w / 2 - s), 0, b * (d / 2 - s), .75]);
 function buildFurniture(f) {
   const g = tag(new THREE.Group(), f.id, 'furniture', f.type);
-  g.position.set(f.x, 0, f.z); g.rotation.y = -(f.rot || 0) * Math.PI / 180;
+  g.position.set(f.x, 0, f.z); g.rotation.y = (f.rot || 0) * Math.PI / 180; // 90 = baksiden mot −x
   for (const [w, h, d, x, y, z, c] of (PARTS[f.type] || ((w, d, h) => [[w, h, d, 0, 0, 0]]))(f.w, f.d, f.h))
     box(g, w, h, d, x, y, z, c === 'glass' ? mat('glass', '#bcd7e6') : mat(f.material, typeof c === 'string' ? c : c ? shade(f.color, c) : f.color));
   return g;
