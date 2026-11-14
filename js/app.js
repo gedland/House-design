@@ -15,8 +15,12 @@ catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebG
 // Lagring i IndexedDB
 const DB = new Promise((ok, no) => { const r = indexedDB.open('husform', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
 const db = (mode, fn) => DB.then(d => new Promise((ok, no) => { const q = fn(d.transaction('kv', mode).objectStore('kv')); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); })).catch(() => null);
-let saveT;
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => db('readwrite', s => s.put(S.house, 'house')), 300); };
+// Huset lagres med en gang det endres, så det er der etter en ny innlasting. Lagres en kopi, så senere endringer i
+// S.house ikke blandes inn i en skriving som ikke er ferdig.
+const save = () => db('readwrite', s => s.put(clone(S.house), 'house'));
+// Når siden skjules eller lukkes midt i en redigering (f.eks. mens et tall skrives), lagres det som er gjort så langt.
+addEventListener('pagehide', () => commit());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') commit(); });
 
 // Alle endringer går gjennom edit(): JSON endres, 3D tegnes på nytt. commit() lagrer og legger et angre-steg.
 let drawT = 0;
