@@ -102,6 +102,11 @@ h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: -4px
 .job.small { flex: 1; min-width: 0; gap: 6px; }
 .job.small .job-text { font-size: 14px; font-weight: 400; }
 @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+.report { display: grid; gap: 10px; font-size: 15px; }
+.report h3 { margin: 4px 0 -6px; }
+.report ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.report details { color: var(--muted); font-size: 14px; }
+.report summary { cursor: pointer; padding: 10px 0; }
 .note { font-size: 14px; padding: 10px 12px; background: var(--tint); border-radius: 10px; }
 
 @media (hover: hover) { header button:hover, #bar button:hover, .tile:hover, .list > *:hover, .acts button:not([aria-pressed=true]):hover, .icon:hover { background: var(--well); } }

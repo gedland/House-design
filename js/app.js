@@ -7,7 +7,7 @@ const btn = (textContent, onclick, p = {}) => h('button', { type: 'button', text
 const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
-const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, note: '' };
+const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, report: null, note: '' };
 let view;
 try { view = createView($('#view')); }
 catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
@@ -44,7 +44,7 @@ const num = (key, label, min = 0, step = .05) => ({ key, label, type: 'number', 
 const opts = o => Object.entries(o).map(([v, x]) => [v, x.label || x]);
 const colorF = (label = 'Farge') => ({ key: 'color', label, type: 'color' }), matF = (label = 'Materiale') => ({ key: 'material', label, type: 'select', options: opts(MATERIALS) });
 const FIELDS = {
-  room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1.8), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
+  room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   wall: [colorF(), matF(), num('length', 'Lengde (m)', .2), num('angle', 'Retning (°)', -360, 15), num('thickness', 'Tykkelse (m)', .05, .01)],
   opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
   furniture: [{ key: 'type', label: 'Type', type: 'select', options: opts(FURNITURE) }, colorF(), matF(), num('w', 'Bredde (m)', .1), num('d', 'Dybde (m)', .1), num('h', 'Høyde (m)', .1), num('rot', 'Rotasjon (°)', -360, 15), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
@@ -103,7 +103,7 @@ function add(key, item, move = true) {
   item.id = uid(key[0] === 'f' ? 'm' : key[0]);
   edit(() => S.house.floors[floorIndex()][key].push(item)); select(item.id); S.move = move; ui();
 }
-const wallAt = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1, z1, x2, z2, thickness: like?.thickness ?? .2, material: like?.material ?? 'panel', color: like?.color ?? '#e9e4d8', openings: [] });
+const wallAt = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1, z1, x2, z2, thickness: like?.thickness ?? .2, exterior: like?.exterior ?? false, material: like?.material ?? 'panel', color: like?.color ?? '#e9e4d8', openings: [] });
 function addFurniture(type) { const { label, ...d } = FURNITURE[type]; add('furniture', { type, ...spot(), rot: 0, ...d }); }
 function addWall() { const p = spot(); add('walls', wallAt(p.x - 1.5, p.z, p.x + 1.5, p.z, { thickness: .1, material: 'maling', color: '#f1eee7' })); }
 function addRoom() {
@@ -205,18 +205,19 @@ async function checkServer() {
   if (S.sheet === 'photos') ui();
 }
 
-// Fremdrift: sending (0–15 %), Claude ser på bildene (15–55 %, etter tid), Claude skriver modellen (55–97 %, etter mengde tekst).
+// Fremdrift: sending (0–15 %), Claude ser på bildene (15–50 %, etter tid), Claude skriver modellen (50–80 %, etter mengde tekst),
+// kontroll, og eventuelt en rette-runde der Claude retter feil kontrollen fant (82–97 %).
 const STAGES = {
   send: 'Sender bildene til serveren', wait: 'Venter på Claude', look: 'Claude ser på bildene og finner ut hvordan huset henger sammen',
-  write: 'Claude skriver ned modellen', draw: 'Tegner modellen',
+  write: 'Claude skriver ned modellen', check: 'Kontrollerer modellen', fix: 'Claude retter feil som kontrollen fant', draw: 'Tegner modellen',
 };
 const ease = (x, k) => 1 - Math.exp(-x / k);
 function jobState() {
   const j = S.job, secs = (Date.now() - j.t0) / 1000;
-  const pct = j.stage === 'send' ? 15 * j.part : j.stage === 'wait' ? 15 : j.stage === 'look' ? 15 + 40 * ease(secs - j.t1, 90)
-    : j.stage === 'write' ? 55 + 42 * ease(j.chars, 20000) : 99;
+  const pct = { send: 15 * j.part, wait: 15, look: 15 + 35 * ease(secs - j.t1, 90), write: 50 + 30 * ease(j.chars, 20000), check: 82,
+    fix: 82 + 15 * ease(j.chars, 20000) }[j.stage] ?? 99;
   const time = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
-  const extra = j.stage === 'send' ? `${Math.round(j.part * 100)} %` : j.stage === 'write' && j.chars >= 1000 ? `${Math.round(j.chars / 1000)} kB` : '';
+  const extra = j.stage === 'send' ? `${Math.round(j.part * 100)} %` : /write|fix/.test(j.stage) && j.chars >= 1000 ? `${Math.round(j.chars / 1000)} kB` : '';
   return { pct, text: `${STAGES[j.stage]} …${extra ? ` ${extra}` : ''}`, time };
 }
 // Oppdaterer fremdriften der den vises (arket eller banneret), uten å tegne resten av grensesnittet på nytt.
@@ -247,15 +248,18 @@ function httpError(status, j) {
 function post(images) {
   return new Promise((ok, no) => {
     const x = new XMLHttpRequest(); S.job.xhr = x;
-    let seen = 0, house = null, error = null;
-    const stage = (st, o = {}) => { if (st === 'look' && S.job.stage !== 'look') S.job.t1 = (Date.now() - S.job.t0) / 1000; Object.assign(S.job, { stage: st }, o); showJob(); };
+    let seen = 0, done = null, error = null;
+    const stage = (st, o = {}) => {
+      if (st !== S.job.stage) { if (st === 'look') S.job.t1 = (Date.now() - S.job.t0) / 1000; S.job.chars = 0; }
+      Object.assign(S.job, { stage: st }, o); showJob();
+    };
     const read = () => {
       if (!x.getResponseHeader('Content-Type')?.includes('ndjson')) return;
       const t = x.responseText; let i;
       while ((i = t.indexOf('\n', seen)) >= 0) {
         let m; try { m = JSON.parse(t.slice(seen, i)); } catch { m = null; } seen = i + 1;
         if (m?.type === 'progress') stage(m.stage, m.chars != null ? { chars: m.chars } : {});
-        else if (m?.type === 'done') house = m.house;
+        else if (m?.type === 'done') done = m;
         else if (m?.type === 'error') error = m.error;
       }
     };
@@ -266,8 +270,8 @@ function post(images) {
     x.onload = () => {
       if (x.status !== 200) { let j = null; try { j = JSON.parse(x.responseText); } catch {} return no(httpError(x.status, j)); }
       read();
-      if (!x.getResponseHeader('Content-Type')?.includes('ndjson')) { try { house = JSON.parse(x.responseText).house; } catch {} }
-      if (error) no(failed(error)); else if (house) ok(house);
+      if (!x.getResponseHeader('Content-Type')?.includes('ndjson')) { try { done = JSON.parse(x.responseText); } catch {} }
+      if (error) no(failed(error)); else if (done?.house) ok(done);
       else no(failed('Svaret fra serveren stoppet før modellen var ferdig. Prøv igjen.'));
     };
     x.onerror = () => no(failed(navigator.onLine === false ? 'Mobilen er uten nett. Koble til og prøv igjen.'
@@ -283,12 +287,12 @@ async function analyze() {
   const timer = setInterval(showJob, 1000);
   const lock = await navigator.wakeLock?.request('screen').catch(() => null); // hindrer at mobilen sovner og bryter forbindelsen
   try {
-    const raw = await post(S.photos.map(p => p.data));
+    const res = await post(S.photos.map(p => p.data));
     S.job.stage = 'draw'; showJob();
     let house;
-    try { house = normalize(raw); } catch (e) { throw failed(`Claude svarte, men modellen kunne ikke brukes: ${e.message} Prøv igjen.`); }
+    try { house = normalize(res.house); } catch (e) { throw failed(`Claude svarte, men modellen kunne ikke brukes: ${e.message} Prøv igjen.`); }
     S.photos = []; S.job = null; replace(house);
-    say('Modellen er klar. Målene er anslag – trykk på en del for å rette den.');
+    S.report = res.report || { fixed: [], problems: [], guesses: '' }; sheet('report');
   } catch (e) {
     S.job = null;
     if (!e.shown && !e.aborted) console.error(e);
@@ -296,6 +300,17 @@ async function analyze() {
   } finally { clearInterval(timer); lock?.release().catch(() => {}); }
 }
 function cancelJob() { S.job?.xhr?.abort(); }
+// Etter tolkningen: hva kontrollen rettet, hva som bør sjekkes, og hva Claude anslo uten å se det.
+function reportSheet() {
+  const { fixed = [], problems = [], guesses = '' } = S.report || {}, items = l => h('ul', {}, l.map(t => h('li', { textContent: t })));
+  return [head(S.house.name, 'Modellen er klar', () => sheet(null)),
+    h('p', { className: 'hint', textContent: 'Målene er anslag. Trykk på en vegg, et rom, et vindu eller et møbel for å rette det.' }),
+    h('div', { className: 'report' },
+      problems.length ? [h('h3', { textContent: 'Bør sjekkes' }), items(problems)] : h('p', { textContent: 'Kontrollen fant ingen feil som står igjen.' }),
+      guesses && [h('h3', { textContent: 'Anslått uten å synes i bildene' }), h('p', { textContent: guesses })],
+      fixed.length > 0 && h('details', {}, h('summary', { textContent: `Kontrollen rettet ${fixed.length} ting automatisk` }), items(fixed))),
+    btn('Se modellen', () => sheet(null), { className: 'primary' })];
+}
 function photoSheet() {
   const n = S.photos.length, busy = !!S.job, prep = S.prep;
   const file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: e => { const f = [...e.target.files]; e.target.value = ''; addPhotos(f); } });
@@ -376,7 +391,7 @@ function keyMove() { const k = (...c) => c.some(x => keys.has(x)) ? 1 : 0; stick
 // Tegner hele grensesnittet ut fra tilstanden
 function ui() {
   const el = $('#panel'), f = S.sel && find(S.house, S.sel);
-  const content = f ? selectionPanel(f) : S.sheet === 'add' ? addSheet() : S.sheet === 'photos' ? photoSheet() : S.sheet === 'more' ? moreSheet() : null;
+  const content = f ? selectionPanel(f) : S.sheet === 'add' ? addSheet() : S.sheet === 'photos' ? photoSheet() : S.sheet === 'more' ? moreSheet() : S.sheet === 'report' ? reportSheet() : null;
   const job = S.job && S.sheet !== 'photos';
   const banner = S.placing ? `Trykk på veggen der ${S.placing === 'door' ? 'døren' : 'vinduet'} skal stå.` : !content && (job || S.note);
   document.body.className = [content && 'has-panel', f && S.move && 'moving', S.walk && 'walk', (S.placing || banner) && 'has-banner', localStorage.tipSeen && 'seen'].filter(Boolean).join(' ');
