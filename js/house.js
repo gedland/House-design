@@ -395,3 +395,16 @@ export function inspect(input, { final = false } = {}) {
   if (!house.floors.some(f => f.walls.some(w => w.exterior && w.openings.some(o => o.type === 'door')))) problems.push({ text: 'Huset har ingen ytterdør.', serious: false });
   return { house, fixed, problems };
 }
+
+// Ytterkonturen av en etasje: ringene ytterveggene danner (lister av [x, z]-hjørner),
+// eller rektangelet rundt etasjen når ytterveggene ikke danner lukkede ringer. null når etasjen er tom.
+export function outline(floor) {
+  const ext = floor.walls.filter(w => w.exterior);
+  if (ext.length >= 3 && [...degrees(ext).values()].every(n => n === 2)) {
+    const rs = rings(ext).filter(r => r.length >= 3);
+    if (rs.length) return rs;
+  }
+  const b = bounds(floor);
+  return b && [[[b.x0, b.z0], [b.x1, b.z0], [b.x1, b.z1], [b.x0, b.z1]]];
+}
+export { inPoly };

@@ -371,13 +371,28 @@ function enter() {
   const i = S.floor ?? 0, f = S.house.floors[i], r = [...f.rooms].sort((a, b) => b.w * b.d - a.w * a.d)[0], b = bounds(f);
   const x = r ? r.x + r.w / 2 : b ? (b.x0 + b.x1) / 2 : 0, z = r ? r.z + r.d / 2 : b ? (b.z0 + b.z1) / 2 : 0;
   S.walk = { floor: i }; S.sheet = null; S.placing = null;
-  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: 0 }); select(null);
+  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: 0, walls: solid(f) }); select(null);
+}
+// Veggene i en etasje som stykker du ikke kan gå gjennom. Døråpninger er hull i veggen.
+function solid(f) {
+  const out = [];
+  for (const w of f.walls) {
+    const L = wallLength(w), r = w.thickness / 2 + .2, ux = (w.x2 - w.x1) / (L || 1), uz = (w.z2 - w.z1) / (L || 1);
+    let at = 0;
+    for (const o of [...w.openings].filter(o => o.type === 'door' && o.height >= 1.8).sort((a, b) => a.pos - b.pos)) {
+      const a = o.pos - o.width / 2, b = o.pos + o.width / 2;
+      if (a > at) out.push([w.x1 + ux * at, w.z1 + uz * at, w.x1 + ux * a, w.z1 + uz * a, r]);
+      at = Math.max(at, b);
+    }
+    if (at < L) out.push([w.x1 + ux * at, w.z1 + uz * at, w.x2, w.z2, r]);
+  }
+  return out;
 }
 const eye = i => S.house.floors.slice(0, i).reduce((s, f) => s + f.height, 0) + Math.min(1.6, S.house.floors[i].height - .3);
 function leave() { S.walk = null; stick(0, 0); view.setWalk(null); draw(); ui(); }
 function climb(d) {
   const i = S.walk.floor + d; if (!S.house.floors[i]) return;
-  S.walk.floor = i; const p = view.camera.position; view.setWalk({ x: p.x, z: p.z, y: eye(i) }); ui();
+  S.walk.floor = i; const p = view.camera.position; view.setWalk({ x: p.x, z: p.z, y: eye(i), walls: solid(S.house.floors[i]) }); ui();
 }
 const keys = new Set();
 function stick(x, z) { const m = Math.hypot(x, z); view.go(m > 1 ? x / m : x, m > 1 ? z / m : z); $('#knob').style.translate = `${x * 34}px ${-z * 34}px`; }
