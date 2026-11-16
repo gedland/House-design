@@ -1,6 +1,10 @@
 // Tegner husets JSON som Three.js-objekter. Hvert rom, vegg, åpning og møbel er et eget objekt med userData.id.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MATERIALS, bounds } from './house.js';
 
 const PATTERNS = { // 256 px = 1 m, lyse mønstre som fargen ganges inn i
@@ -25,8 +29,8 @@ function mat(material, color) {
   const key = material + color;
   if (matCache[key]) return matCache[key];
   const m = MATERIALS[material] || MATERIALS.maling;
-  return matCache[key] = material === 'glass'
-    ? new THREE.MeshStandardMaterial({ color, roughness: .1, transparent: true, opacity: .35 })
+  return matCache[key] = material === 'glass' // sterkere omgivelseskart, så himmelen speiles i rutene
+    ? new THREE.MeshStandardMaterial({ color, roughness: .05, transparent: true, opacity: .4, envMapIntensity: 2.5 })
     : new THREE.MeshStandardMaterial({ color, roughness: m.rough, metalness: m.metal || 0, map: texture(material) });
 }
 const shade = (color, k) => '#' + new THREE.Color(color).multiplyScalar(k).getHexString();
@@ -265,19 +269,65 @@ function buildRoof(house, upTo) {
   return group.children.length ? group : null;
 }
 
+// Omgivelseskart: himmel som blir lysere mot horisonten, og bakke under. Gir mykt lys fra alle kanter og noe å speile i glass og metall.
+function skyEnvironment(renderer) {
+  const geo = new THREE.SphereGeometry(10, 48, 24), pos = geo.attributes.position, col = [], c = new THREE.Color();
+  const zenith = new THREE.Color('#a9c1dc'), horizon = new THREE.Color('#f2f2ee'), ground = new THREE.Color('#7d776c'); // nesten nøytralt, så fargene på huset ikke forskyves
+  for (let i = 0; i < pos.count; i++) {
+    const h = pos.getY(i) / 10;
+    if (h >= 0) c.copy(horizon).lerp(zenith, Math.pow(h, .6)); else c.copy(horizon).lerp(ground, Math.min(1, -h * 6));
+    col.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const sky = new THREE.Scene(); sky.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff2d8').multiplyScalar(6) }));
+  sun.position.set(-9, 16, 7).setLength(9); sky.add(sun);
+  const pmrem = new THREE.PMREMGenerator(renderer), env = pmrem.fromScene(sky, .02).texture;
+  pmrem.dispose(); geo.dispose();
+  return env;
+}
+// Three.js' filmiske ACES-kurve. Brukes baklengs på bakgrunnen, så den får akkurat den fargen vi ber om etter tonemappingen.
+const IN = [.59719, .076, .0284, .35458, .90834, .13383, .04823, .01566, .83777], OUT = [1.60475, -.10208, -.00327, -.53108, 1.10813, -.07276, -.07367, -.00605, 1.07602];
+const mul = (m, [r, g, b]) => [m[0] * r + m[3] * g + m[6] * b, m[1] * r + m[4] * g + m[7] * b, m[2] * r + m[5] * g + m[8] * b];
+const fit = v => (v * (v + .0245786) - .000090537) / (v * (.983729 * v + .432951) + .238081);
+const aces = (c, e) => mul(OUT, mul(IN, c.map(v => v * e / .6)).map(fit)).map(v => Math.min(1, Math.max(0, v)));
+function untone(hex, exposure) {
+  const t = new THREE.Color(hex).toArray(); let x = [...t];
+  for (let i = 0; i < 60; i++) { const y = aces(x, exposure); x = x.map((v, k) => Math.max(0, v + (t[k] - y[k]) * 1.5)); }
+  return new THREE.Color().fromArray(x);
+}
+// Kontaktskygger. Glass tas ikke med (det skal ikke få skygge selv), og skyggen regnes ut i omtrent én prikk per CSS-piksel.
+class ContactShadows extends GTAOPass {
+  scale = 1;
+  overrideVisibility() { super.overrideVisibility(); this.scene.traverse(o => { if (o.material?.transparent) o.visible = false; }); }
+  setSize(w, h) { super.setSize(Math.max(1, Math.round(w * this.scale)), Math.max(1, Math.round(h * this.scale))); }
+}
+
 export function createView(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1; // filmisk: myke høylys i stedet for utbrent hvitt
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, .05, 300);
+  // Omgivelseskartet og kontaktskyggene trenger flyttall-bilder. Eldre mobiler uten dem får det enkle himmellyset fra før.
+  const hdr = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+  if (hdr) { scene.environment = skyEnvironment(renderer); scene.environmentIntensity = .5; }
   const root = new THREE.Group(); root.name = 'Hus'; scene.add(root);
   const fill = new THREE.AmbientLight('#ffffff', 0);
-  scene.add(new THREE.HemisphereLight('#ffffff', '#8a8578', 1.5), fill);
-  const sun = new THREE.DirectionalLight('#fff4e0', 2.2);
+  scene.add(new THREE.HemisphereLight('#ffffff', '#8a8578', hdr ? .3 : 1.5), fill);
+  const sun = new THREE.DirectionalLight('#fff4e0', 2);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0005; sun.shadow.normalBias = .03;
   Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 90 });
   scene.add(sun, sun.target);
   const ground = new THREE.Mesh(new THREE.CircleGeometry(80, 48), new THREE.MeshStandardMaterial({ roughness: 1 }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -.16; ground.receiveShadow = true; scene.add(ground);
+  // Etterbehandling: scenen (med kantutjevning) → kontaktskygger → tonemapping og fargerom.
+  // Uten flyttall-bilder tegnes scenen rett ut, fortsatt med tonemapping, men uten kontaktskygger.
+  let composer = null, ao = null;
+  if (hdr) {
+    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+    ao = new ContactShadows(scene, camera, 1, 1, undefined, { radius: .4, distanceExponent: 1.5, thickness: .3, distanceFallOff: .5, scale: 1.6, samples: 16 }, { radius: 4, radiusExponent: 1, samples: 16 });
+    composer.addPass(new RenderPass(scene, camera)); composer.addPass(ao); composer.addPass(new OutputPass());
+  }
   const controls = new OrbitControls(camera, canvas);
   controls.maxPolarAngle = Math.PI / 2 - .02; controls.minDistance = 1; controls.maxDistance = 90;
   let dirty = true, byId = {}, lit = [], inset = [0, 0], last = 0;
@@ -287,11 +337,14 @@ export function createView(canvas) {
 
   function theme() {
     const dark = document.documentElement.dataset.theme === 'dark';
-    scene.background = new THREE.Color(dark ? '#1c1b19' : '#dfe8ee'); ground.material.color.set(dark ? '#2b2e2a' : '#b9c2ad'); invalidate();
+    // Uten etterbehandling tonemappes ikke bakgrunnen, med etterbehandling må den regnes baklengs for å få riktig farge.
+    const bg = dark ? '#1c1b19' : '#dfe8ee'; scene.background = composer ? untone(bg, renderer.toneMappingExposure) : new THREE.Color(bg);
+    ground.material.color.set(dark ? '#3c4039' : '#b5c4a2'); invalidate();
   }
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(w, h, false);
+    const pr = Math.min(devicePixelRatio, 2); renderer.setPixelRatio(pr); renderer.setSize(w, h, false);
+    if (composer) { ao.scale = 1 / pr; composer.setPixelRatio(pr); composer.setSize(w, h); }
     camera.aspect = w / h; camera.setViewOffset(w, h, inset[0] / 2, inset[1] / 2, w, h); invalidate();
   }
   // Flytter bildet så huset står midt i den delen av skjermen som panelet ikke dekker.
@@ -308,7 +361,7 @@ export function createView(canvas) {
       }
       camera.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ');
     }
-    if (dirty) { dirty = false; renderer.render(scene, camera); }
+    if (dirty) { dirty = false; composer ? composer.render(dt) : renderer.render(scene, camera); }
   })(0);
 
   // floor = null viser hele huset med tak. Et tall viser etasjene til og med den, uten tak, så du ser ned i rommene.
@@ -327,6 +380,8 @@ export function createView(canvas) {
     }
     const roof = buildRoof(house, floor); if (roof) root.add(roof);
     root.traverse(o => { if (o.userData.id) byId[o.userData.id] = o; });
+    // Kontaktskyggene regnes bare ut rundt huset, ikke ut over hele bakken.
+    if (ao) { const b = new THREE.Box3().setFromObject(root); ao.setSceneClipBox(b.isEmpty() ? null : b.expandByScalar(1)); }
     invalidate();
   }
   function select(id) {
@@ -349,7 +404,7 @@ export function createView(canvas) {
   // Interiørmodus: kameraet står i øyehøyde og styres med se() og gå().
   function setWalk(pos) {
     if (pos && !walk.on) walk.saved = { p: camera.position.clone(), t: controls.target.clone() };
-    walk.on = !!pos; controls.enabled = !pos; fill.intensity = pos ? .9 : 0; camera.fov = pos ? 75 : 50; walk.move = [0, 0];
+    walk.on = !!pos; controls.enabled = !pos; fill.intensity = pos ? .75 : 0; camera.fov = pos ? 75 : 50; walk.move = [0, 0];
     if (pos) { camera.position.set(pos.x, pos.y, pos.z); walk.pitch = 0; if (pos.yaw !== undefined) walk.yaw = pos.yaw; }
     else if (walk.saved) { camera.position.copy(walk.saved.p); controls.target.copy(walk.saved.t); controls.update(); }
     resize();
