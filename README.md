@@ -5,7 +5,7 @@ Bilder av ett hus inn → redigerbar 3D-modell. Nettapp uten byggesteg (vanilla 
 1. **Bilder:** velg 5–30 bilder av ett hus, ute og inne. De krympes i nettleseren og sendes til serveren.
 2. **Tolkning:** serveren spør Claude (`claude-opus-5-5`) og får tilbake ett JSON-objekt: etasjer, rom, vegger, dører, vinduer, tak, materialer, farger og møbler. Målene er anslag.
 3. **3D:** Three.js tegner JSON-en. Hver vegg, hvert gulv, tak, vindu og møbel er et eget objekt.
-4. **Rediger:** trykk på et objekt for å endre farge, materiale og mål, flytte eller slette. «Legg til» gir vegg, dør, vindu, rom, etasje og møbler. Naboene følger med: flytter du en vegg, forlenges veggene som møter den, rommene langs den endrer størrelse, dører og vinduer blir stående i veggen sin, og taket følger ytterveggene. «Gå inn» er interiørmodus.
+4. **Rediger:** trykk på et objekt for å endre farge, materiale og mål, flytte eller slette. «Legg til» gir vegg, dør, vindu, rom, etasje og møbler. «Gå inn» er interiørmodus.
 5. **Lagre:** alle endringer oppdaterer JSON-en og lagres i nettleseren (IndexedDB), med angre. «Mer» eksporterer JSON og GLB, og importerer JSON.
 
 ## Kjør
