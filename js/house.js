@@ -4,7 +4,7 @@
 //   floors: [{ id, name, height,
 //     rooms:     [{ id, name, x, z, w, d, material, color }],            // x,z = hjørne, w = bredde (x), d = dybde (z); materiale/farge gjelder gulvet
 //     walls:     [{ id, x1, z1, x2, z2, thickness, material, color,
-//                   openings: [{ id, type: 'door'|'window', pos, width, height, sill, color }] }],  // pos = senter, målt fra (x1,z1)
+//                   openings: [{ id, type: 'door'|'window', pos, width, height, sill, material, color }] }],  // pos = senter, målt fra (x1,z1); materiale/farge gjelder dørblad eller karm
 //     furniture: [{ id, type, x, z, rot, w, d, h, material, color }]     // x,z = senter, rot i grader
 //   }],
 //   roof: { type: 'gable'|'hip'|'flat', pitch, overhang, material, color } | null
@@ -29,14 +29,14 @@ export const FURNITURE = {
   plante: { label: 'Plante', w: .5, d: .5, h: 1.2, material: 'maling', color: '#4f7a4c' },
   annet: { label: 'Annet', w: .8, d: .8, h: .8, material: 'maling', color: '#b9b4a8' },
 };
-export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, color: '#f2efe8' } };
+export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, material: 'tre', color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, material: 'maling', color: '#f2efe8' } };
 export const ROOFS = { gable: 'Saltak', hip: 'Valmtak', flat: 'Flatt tak' };
 export const uid = p => p + Math.random().toString(36).slice(2, 8);
 export const round = v => Math.round(v * 1000) / 1000;
 
 const P = '#e9e4d8', I = '#f1eee7', WF = '#f2efe8';
-const win = (pos, width = 1.2, height = 1.2, sill = .9) => ({ type: 'window', pos, width, height, sill, color: WF });
-const door = (pos, color = '#efece6') => ({ type: 'door', pos, width: .9, height: 2.1, sill: 0, color });
+const win = (pos, width = 1.2, height = 1.2, sill = .9) => ({ type: 'window', pos, width, height, sill, material: 'maling', color: WF });
+const door = (pos, color = '#efece6') => ({ type: 'door', pos, width: .9, height: 2.1, sill: 0, material: 'tre', color });
 const outer = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .2, material: 'panel', color: P, openings });
 const inner = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .1, material: 'maling', color: I, openings });
 const item = (type, x, z, rot = 0, o = {}) => ({ ...FURNITURE[type], label: undefined, type, x, z, rot, ...o });
@@ -82,7 +82,7 @@ export function normalize(h) {
     id: id(f, 'f'), name: String(f.name || `${i + 1}. etasje`).slice(0, 40), height: n(f.height, 2.4, 1.8, 6),
     rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'tre'), color: col(r.color, '#c8a57a') })),
     walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), material: mt(w.material, 'maling'), color: col(w.color, P),
-      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), color: col(o.color, d.color) }; }) }))
+      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), material: mt(o.material, d.material), color: col(o.color, d.color) }; }) }))
       .filter(w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1) >= .1),
     furniture: arr(f.furniture).map(m => { const t = FURNITURE[m.type] ? m.type : 'annet', d = FURNITURE[t]; return { id: id(m, 'm'), type: t, x: n(m.x, 0), z: n(m.z, 0), rot: n(m.rot, 0, -360, 360), w: n(m.w, d.w, .1, 12), d: n(m.d, d.d, .1, 12), h: n(m.h, d.h, .1, 5), material: mt(m.material, d.material), color: col(m.color, d.color) }; }),
   }));
@@ -124,15 +124,98 @@ export function bounds(floor) {
   for (const r of floor.rooms) { xs.push(r.x, r.x + r.w); zs.push(r.z, r.z + r.d); }
   return xs.length ? { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) } : null;
 }
-// Flytter eller endrer størrelse på et rom. Vegger og møbler som hører til rommet følger med.
-export function reshapeRoom(floor, room, next) {
-  const o = { x: room.x, z: room.z, w: room.w, d: room.d }, n = { ...o, ...next }, e = .03;
-  n.w = Math.max(.5, n.w); n.d = Math.max(.5, n.d);
-  const inside = (x, z, m) => x >= o.x - m && x <= o.x + o.w + m && z >= o.z - m && z <= o.z + o.d + m;
-  const map = (v, a, len, na, nlen) => round(Math.abs(v - a) < e ? na : Math.abs(v - a - len) < e ? na + nlen : na + (v - a) * nlen / len);
-  for (const w of floor.walls) for (const k of [1, 2]) if (inside(w['x' + k], w['z' + k], e)) {
-    w['x' + k] = map(w['x' + k], o.x, o.w, n.x, n.w); w['z' + k] = map(w['z' + k], o.z, o.d, n.z, n.d);
+
+// Redigering der naboene følger med. E = hvor nær to punkter må ligge for å regnes som sammenkoblet.
+const E = .03;
+const dir = w => { const L = wallLength(w) || 1; return [(w.x2 - w.x1) / L, (w.z2 - w.z1) / L]; };
+const onWall = (w, x, z) => { const [ux, uz] = dir(w), t = (x - w.x1) * ux + (z - w.z1) * uz; return t > -E && t < wallLength(w) + E && Math.abs((x - w.x1) * uz - (z - w.z1) * ux) < E; };
+const parallel = (a, b) => { const [ax, az] = dir(a), [bx, bz] = dir(b); return Math.abs(ax * bz - az * bx) < .05; };
+const axis = w => Math.abs(w.x1 - w.x2) < E ? 'x' : Math.abs(w.z1 - w.z2) < E ? 'z' : null; // 'x' = veggen står på en fast x (går langs z)
+const span = (w, ax) => ax === 'x' ? [Math.min(w.z1, w.z2), Math.max(w.z1, w.z2)] : [Math.min(w.x1, w.x2), Math.max(w.x1, w.x2)];
+const rect = (r, ax) => ax === 'x' ? [r.x, r.w, r.z, r.d] : [r.z, r.d, r.x, r.w]; // [kant, størrelse, start på tvers, lengde på tvers]
+// Rom med en kant på linjen ax = c mellom a og b. side 0 = rommets start ligger på linjen, 1 = rommets slutt.
+function edgeRooms(floor, ax, c, a, b) {
+  const out = [];
+  for (const r of floor.rooms) {
+    const [p, s, q, t] = rect(r, ax);
+    if (Math.min(b, q + t) - Math.max(a, q) < E) continue;
+    if (Math.abs(p - c) < E) out.push([r, 0]); else if (Math.abs(p + s - c) < E) out.push([r, 1]);
   }
-  for (const f of floor.furniture) if (inside(f.x, f.z, 0)) { f.x = map(f.x, o.x, o.w, n.x, n.w); f.z = map(f.z, o.z, o.d, n.z, n.d); }
-  Object.assign(room, { x: round(n.x), z: round(n.z), w: round(n.w), d: round(n.d) });
+  return out;
+}
+// Flytter romkantene med v, men aldri så langt at et rom blir smalere enn 0,5 m. Møbler som havner utenfor skyves inn igjen.
+function slideRooms(floor, sides, ax, v) {
+  for (const [r, side] of sides) { const s = rect(r, ax)[1] - .5; v = side ? Math.max(v, -s) : Math.min(v, s); }
+  if (!v) return 0;
+  const [k, m] = ax === 'x' ? ['x', 'w'] : ['z', 'd'];
+  for (const [r, side] of sides) {
+    const items = floor.furniture.filter(f => f.x >= r.x && f.x <= r.x + r.w && f.z >= r.z && f.z <= r.z + r.d);
+    if (side) r[m] = round(r[m] + v); else { r[k] = round(r[k] + v); r[m] = round(r[m] - v); }
+    for (const f of items) f[k] = round(Math.min(r[k] + r[m] - .1, Math.max(r[k] + .1, f[k])));
+  }
+  return v;
+}
+// Holder dører og vinduer innenfor veggen (og under taket når H er gitt).
+export function fitOpenings(wall, H) {
+  const L = wallLength(wall);
+  for (const o of wall.openings) {
+    o.width = round(Math.max(.3, Math.min(o.width, L - .2)));
+    o.pos = round(Math.max(o.width / 2 + .1, Math.min(L - o.width / 2 - .1, o.pos)));
+    if (H) { o.sill = round(Math.max(0, Math.min(o.sill, H - .4))); o.height = round(Math.max(.3, Math.min(o.height, H - o.sill))); }
+  }
+}
+// Flytter en vegg. Vegger som ender på den forlenges eller kortes inn, rom langs den følger kanten, og åpninger i
+// naboveggene blir stående der de sto. En vegg som henger sammen med noe, flyttes bare på tvers. Gir flyttingen som ble gjort.
+export function shiftWall(floor, wall, dx, dz) {
+  const [ux, uz] = dir(wall), others = floor.walls.filter(w => w !== wall && !parallel(w, wall)), ax = axis(wall);
+  const ends = others.flatMap(w => [1, 2].filter(k => onWall(wall, w['x' + k], w['z' + k])).map(k => [w, k]));
+  const sides = ax ? edgeRooms(floor, ax, wall[ax + 1], ...span(wall, ax)) : [];
+  if (ends.length || sides.length || others.some(w => onWall(w, wall.x1, wall.z1) || onWall(w, wall.x2, wall.z2))) {
+    if (ax === 'x') dz = 0; else if (ax === 'z') dx = 0; else { const s = dz * ux - dx * uz; dx = -uz * s; dz = ux * s; }
+  }
+  if (sides.length) { const v = slideRooms(floor, sides, ax, ax === 'x' ? dx : dz); if (ax === 'x') dx = v; else dz = v; }
+  dx = round(dx); dz = round(dz);
+  if (!dx && !dz) return [0, 0];
+  for (const [w, k] of ends) {
+    const L = wallLength(w); w['x' + k] = round(w['x' + k] + dx); w['z' + k] = round(w['z' + k] + dz);
+    if (k === 1) for (const o of w.openings) o.pos = round(o.pos + wallLength(w) - L);
+    fitOpenings(w);
+  }
+  wall.x1 = round(wall.x1 + dx); wall.x2 = round(wall.x2 + dx); wall.z1 = round(wall.z1 + dz); wall.z2 = round(wall.z2 + dz);
+  return [dx, dz];
+}
+// Endrer lengden på en vegg. Ender den i en annen vegg, flyttes den veggen med, ellers flyttes bare sluttpunktet.
+export function setWallLength(floor, w, len) {
+  const d = Math.max(.2, len) - wallLength(w), [ux, uz] = dir(w);
+  const n = floor.walls.find(o => o !== w && !parallel(o, w) && onWall(o, w.x2, w.z2));
+  if (n) shiftWall(floor, n, ux * d, uz * d); else setWall(w, len, Math.atan2(uz, ux) * 180 / Math.PI);
+  fitOpenings(w);
+}
+// Flytter én kant av et rom. Står det vegger på kanten, er det de som flyttes (og tar rommene med seg).
+function moveEdge(floor, room, ax, side, v) {
+  const [p, s, q, t] = rect(room, ax), c = side ? p + s : p;
+  const walls = floor.walls.filter(w => axis(w) === ax && Math.abs(w[ax + 1] - c) < E && Math.min(q + t, span(w, ax)[1]) - Math.max(q, span(w, ax)[0]) > E);
+  for (const w of walls) shiftWall(floor, w, ax === 'x' ? v : 0, ax === 'x' ? 0 : v);
+  if (!walls.length) slideRooms(floor, edgeRooms(floor, ax, c, q, q + t), ax, v);
+  const [p2, s2] = rect(room, ax); return (side ? p2 + s2 : p2) - c;
+}
+// Flytter eller endrer størrelse på et rom. Veggene rundt følger med, og naborommene gir plass, så planen forblir tett.
+export function reshapeRoom(floor, room, next) {
+  const n = { x: room.x, z: room.z, w: room.w, d: room.d, ...next };
+  for (const [ax, m] of [['x', 'w'], ['z', 'd']]) {
+    const v0 = n[ax] - room[ax], v1 = n[ax] + Math.max(.5, n[m]) - room[ax] - room[m], items = floor.furniture.filter(f => f.x > room.x && f.x < room.x + room.w && f.z > room.z && f.z < room.z + room.d).map(f => [f, f[ax]]);
+    if (Math.abs(v0 - v1) < 1e-6) { // ren flytting: den fremre kanten først, så den bakre like langt. Møblene i rommet blir med.
+      if (!v0) continue;
+      const got = moveEdge(floor, room, ax, v0 > 0 ? 1 : 0, v0); moveEdge(floor, room, ax, v0 > 0 ? 0 : 1, got);
+      for (const [f, at] of items) f[ax] = round(Math.min(room[ax] + room[m] - .1, Math.max(room[ax] + .1, at + got)));
+    } else { if (v1) moveEdge(floor, room, ax, 1, v1); if (v0) moveEdge(floor, room, ax, 0, v0); }
+  }
+}
+// Sletter et rom med møblene som står i det og veggene som bare hører til dette rommet.
+export function removeRoom(floor, room) {
+  const own = w => { const ax = axis(w); if (!ax) return false; const [p, s, q, t] = rect(room, ax), [a, b] = span(w, ax), c = w[ax + 1];
+    return (Math.abs(c - p) < E || Math.abs(c - p - s) < E) && a > q - E && b < q + t + E && edgeRooms(floor, ax, c, a, b).every(([r]) => r === room); };
+  floor.walls = floor.walls.filter(w => !own(w));
+  floor.furniture = floor.furniture.filter(f => !(f.x > room.x && f.x < room.x + room.w && f.z > room.z && f.z < room.z + room.d));
+  floor.rooms = floor.rooms.filter(r => r !== room);
 }

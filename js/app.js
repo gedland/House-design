@@ -1,4 +1,4 @@
-import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom } from './house.js';
+import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom, shiftWall, setWallLength, fitOpenings, removeRoom } from './house.js';
 import { createView } from './scene.js';
 
 const $ = s => document.querySelector(s);
@@ -23,6 +23,8 @@ let drawT = 0;
 const shown = () => S.walk ? null : S.floor;
 function draw() { if (drawT) return; drawT = requestAnimationFrame(() => { drawT = 0; view.build(S.house, { floor: shown() }); view.select(S.sel); }); }
 function edit(fn, done = true) { S.pending ??= JSON.stringify(S.house); fn(); draw(); if (done) commit(); }
+// Mens et felt skrives i eller et objekt dras, regnes hver endring fra huset slik det var før, så mellomtrinn ikke setter spor.
+function restore() { if (S.pending) S.house = JSON.parse(S.pending); }
 function commit() {
   if (S.pending && S.pending !== JSON.stringify(S.house)) { S.undo.push(S.pending); if (S.undo.length > 50) S.undo.shift(); save(); }
   S.pending = null; $('#undo').disabled = !S.undo.length;
@@ -40,16 +42,17 @@ function select(id) {
 const say = (note = '') => { S.note = note; ui(); };
 
 // Panelet: feltene for det valgte objektet
-const num = (key, label, min = 0, step = .05) => ({ key, label, type: 'number', min, step });
+const num = (key, label, min = 0, step = .05, max = 500) => ({ key, label, type: 'number', min, step, max });
 const opts = o => Object.entries(o).map(([v, x]) => [v, x.label || x]);
 const colorF = (label = 'Farge') => ({ key: 'color', label, type: 'color' }), matF = (label = 'Materiale') => ({ key: 'material', label, type: 'select', options: opts(MATERIALS) });
 const FIELDS = {
-  room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1.8), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
-  wall: [colorF(), matF(), num('length', 'Lengde (m)', .2), num('angle', 'Retning (°)', -360, 15), num('thickness', 'Tykkelse (m)', .05, .01)],
-  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
+  room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1.8, .05, 6), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
+  wall: [colorF(), matF(), num('length', 'Lengde (m)', .2), num('angle', 'Retning (°)', -360, 15), num('thickness', 'Tykkelse (m)', .05, .01, .6)],
+  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), matF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
   furniture: [{ key: 'type', label: 'Type', type: 'select', options: opts(FURNITURE) }, colorF(), matF(), num('w', 'Bredde (m)', .1), num('d', 'Dybde (m)', .1), num('h', 'Høyde (m)', .1), num('rot', 'Rotasjon (°)', -360, 15), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
-  roof: [{ key: 'type', label: 'Takform', type: 'select', options: opts(ROOFS) }, colorF(), matF(), num('pitch', 'Takvinkel (°)', 5, 1), num('overhang', 'Takutstikk (m)')],
+  roof: [{ key: 'type', label: 'Takform', type: 'select', options: opts(ROOFS) }, colorF(), matF(), num('pitch', 'Takvinkel (°)', 5, 1, 60), num('overhang', 'Takutstikk (m)', 0, .05, 2)],
 };
+const MOVE_HINT = { room: 'Dra i 3D-visningen. Veggene rundt rommet følger med, og naborommene gir plass.', wall: 'Dra i 3D-visningen. Vegger som møter denne følger med, og rommene langs den endrer størrelse.', opening: 'Dra i 3D-visningen for å flytte langs veggen.', furniture: 'Dra i 3D-visningen for å flytte møbelet.' };
 const KIND = { room: 'Rom', wall: 'Vegg', opening: 'Åpning', furniture: 'Møbel', roof: 'Tak' };
 const title = f => f.kind === 'room' ? f.item.name || 'Rom' : f.kind === 'wall' ? 'Vegg' : f.kind === 'roof' ? ROOFS[f.item.type] : f.kind === 'opening' ? OPENINGS[f.item.type].label : FURNITURE[f.item.type]?.label || 'Møbel';
 function getValue(f, key) {
@@ -59,38 +62,46 @@ function getValue(f, key) {
   return f.item[key];
 }
 function setValue(f, key, v) {
-  if (f.kind === 'wall' && key === 'length') setWall(f.item, v, wallAngle(f.item));
-  else if (f.kind === 'wall' && key === 'angle') setWall(f.item, wallLength(f.item), v);
-  else if (f.kind === 'room' && key === 'height') f.floor.height = v;
+  const H = f.floor?.height;
+  if (f.kind === 'wall' && key === 'length') setWallLength(f.floor, f.item, v);
+  else if (f.kind === 'wall' && key === 'angle') { setWall(f.item, wallLength(f.item), v); fitOpenings(f.item); }
+  else if (f.kind === 'room' && key === 'height') { f.floor.height = v; for (const w of f.floor.walls) fitOpenings(w, v); }
   else if (f.kind === 'room' && 'xzwd'.includes(key)) reshapeRoom(f.floor, f.item, { [key]: v });
+  else if (key === 'type' && f.kind === 'opening') { const { label, width, color, ...d } = OPENINGS[v]; Object.assign(f.item, d, { type: v }); } // ny type får riktig høyde, brystning og materiale
+  else if (key === 'type' && f.kind === 'furniture') { const { label, ...d } = FURNITURE[v]; Object.assign(f.item, d, { type: v }); }
   else f.item[key] = v;
+  if (f.kind === 'opening') fitOpenings(f.wall, H);
 }
 const head = (small, big, close) => h('div', { className: 'head' }, h('div', {}, small && h('small', { textContent: small }), h('h2', { textContent: big })), btn('✕', close, { className: 'icon', ariaLabel: 'Lukk' }));
 function selectionPanel(f) {
+  const inputs = [];
+  // Viser verdiene slik de ble etter endringen, f.eks. når et mål ble stoppet av en nabo. Feltet det skrives i får stå i fred.
+  const sync = all => { const g = find(S.house, S.sel); if (g) for (const [d, el] of inputs) if (all || el !== document.activeElement) el.value = getValue(g, d.key) ?? ''; };
   const fields = FIELDS[f.kind].map(d => {
     const v = getValue(f, d.key);
     const input = d.type === 'select'
       ? h('select', {}, d.options.map(([value, label]) => h('option', { value, textContent: label, selected: value === v })))
-      : h('input', { type: d.type, value: v ?? '', ...(d.type === 'number' ? { min: d.min, step: d.step, inputMode: 'decimal' } : {}) });
+      : h('input', { type: d.type, value: v ?? '', ...(d.type === 'number' ? { min: d.min, max: d.max, step: d.step, inputMode: 'decimal' } : {}) });
     input.oninput = () => {
       let val = input.value;
-      if (d.type === 'number') { val = parseFloat(val); if (!isFinite(val) || val < d.min) return; }
-      edit(() => setValue(find(S.house, S.sel), d.key, val), false);
+      if (d.type === 'number') { val = parseFloat(val.replace(',', '.')); if (!isFinite(val) || val < d.min) return; val = Math.min(val, d.max); }
+      restore(); edit(() => setValue(find(S.house, S.sel), d.key, val), false); sync();
       if (d.key === 'name' || d.key === 'type') $('#panel h2').textContent = title(find(S.house, S.sel));
     };
-    input.onchange = commit;
+    input.onchange = () => { commit(); sync(true); };
+    inputs.push([d, input]);
     return h('label', { className: d.wide ? 'wide' : '' }, h('span', { textContent: d.label }), input);
   });
   return [head(KIND[f.kind], title(f), () => select(null)),
     h('div', { className: 'acts' },
       f.kind !== 'roof' && btn(S.move ? 'Ferdig flyttet' : 'Flytt', () => { S.move = !S.move; ui(); }, { ariaPressed: String(S.move) }),
       btn('Slett', remove, { className: 'danger' })),
-    S.move && h('p', { className: 'hint', textContent: 'Dra i 3D-visningen for å flytte objektet.' }),
+    S.move ? h('p', { className: 'hint', textContent: MOVE_HINT[f.kind] }) : f.kind === 'roof' && h('p', { className: 'hint', textContent: 'Taket følger ytterveggene. Flytt en yttervegg, så flytter taket seg.' }),
     h('div', { className: 'fields' }, fields)];
 }
 function remove() {
   const f = find(S.house, S.sel); if (!f) return;
-  edit(() => { if (f.kind === 'roof') S.house.roof = null; else f.list.splice(f.list.indexOf(f.item), 1); }); select(null);
+  edit(() => { if (f.kind === 'roof') S.house.roof = null; else if (f.kind === 'room') removeRoom(f.floor, f.item); else f.list.splice(f.list.indexOf(f.item), 1); }); select(null);
 }
 
 // Legg til nye objekter. De havner midt i bildet, på etasjen som vises.
@@ -99,18 +110,23 @@ function spot() {
   const c = S.walk ? view.camera.position : view.controls.target, b = bounds(S.house.floors[floorIndex()]) || { x0: -50, x1: 50, z0: -50, z1: 50 };
   return { x: snap(Math.min(b.x1, Math.max(b.x0, c.x))), z: snap(Math.min(b.z1, Math.max(b.z0, c.z))) };
 }
+// Det som legges til inne i huset, skal synes: vis etasjen uten tak i stedet for hele huset.
+function inside() { if (!S.walk && S.floor === null) showFloor(0); }
 function add(key, item, move = true) {
   item.id = uid(key[0] === 'f' ? 'm' : key[0]);
-  edit(() => S.house.floors[floorIndex()][key].push(item)); select(item.id); S.move = move; ui();
+  edit(() => S.house.floors[floorIndex()][key].push(item)); inside(); select(item.id); S.move = move; ui();
 }
 const wallAt = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1, z1, x2, z2, thickness: like?.thickness ?? .2, material: like?.material ?? 'panel', color: like?.color ?? '#e9e4d8', openings: [] });
 function addFurniture(type) { const { label, ...d } = FURNITURE[type]; add('furniture', { type, ...spot(), rot: 0, ...d }); }
-function addWall() { const p = spot(); add('walls', wallAt(p.x - 1.5, p.z, p.x + 1.5, p.z, { thickness: .1, material: 'maling', color: '#f1eee7' })); }
+function addWall() {
+  const p = spot(), b = bounds(S.house.floors[floorIndex()]), x1 = Math.max(b?.x0 ?? -Infinity, p.x - 1.5), x2 = Math.max(x1 + 1, Math.min(b?.x1 ?? Infinity, p.x + 1.5));
+  add('walls', wallAt(x1, p.z, x2, p.z, { thickness: .1, material: 'maling', color: '#f1eee7' }));
+}
 function addRoom() {
   const f = S.house.floors[floorIndex()], b = bounds(f), x = b ? b.x1 : 0, z = b ? b.z0 : 0, like = f.walls[0];
   const room = { id: uid('r'), name: 'Nytt rom', x, z, w: 3, d: 3, material: 'tre', color: '#c8a57a' };
   edit(() => { f.rooms.push(room); f.walls.push(wallAt(x, z, x + 3, z, like), wallAt(x + 3, z, x + 3, z + 3, like), wallAt(x + 3, z + 3, x, z + 3, like), ...(b ? [] : [wallAt(x, z + 3, x, z, like)])); });
-  select(room.id);
+  inside(); select(room.id);
 }
 function addFloor() {
   const below = S.house.floors.at(-1), b = bounds(below) || { x0: 0, x1: 6, z0: 0, z1: 5 }, like = below.walls[0];
@@ -128,10 +144,13 @@ function place(type) { S.placing = type; S.sheet = null; S.sel = null; draw(); u
 function placeOn(hit) {
   const f = hit && find(S.house, hit.id), wall = f?.kind === 'wall' ? f.item : f?.kind === 'opening' ? f.wall : null;
   if (!wall) return say('Det var ikke en vegg. Trykk på veggen der den skal stå.');
-  const { label, ...d } = OPENINGS[S.placing], L = wallLength(wall), half = Math.min(d.width, L - .2) / 2;
+  const { label, ...d } = OPENINGS[S.placing], L = wallLength(wall);
+  if (L < .6) return say('Veggen er for kort. Velg en lengre vegg.');
   const t = ((hit.point.x - wall.x1) * (wall.x2 - wall.x1) + (hit.point.z - wall.z1) * (wall.z2 - wall.z1)) / L;
-  const o = { id: uid('o'), type: S.placing, pos: snap(Math.min(L - half, Math.max(half, t))), ...d, width: half * 2 };
-  S.placing = null; S.note = ''; edit(() => wall.openings.push(o)); select(o.id);
+  const o = { id: uid('o'), type: S.placing, pos: snap(t), ...d };
+  edit(() => { wall.openings.push(o); fitOpenings(wall, f.floor.height); }, false);
+  if (wall.openings.some(p => p !== o && Math.abs(p.pos - o.pos) < (p.width + o.width) / 2)) { restore(); S.pending = null; return say(`Der står det allerede en dør eller et vindu. Trykk på et ledig sted på veggen.`); }
+  S.placing = null; S.note = ''; commit(); select(o.id);
 }
 function addSheet() {
   const tile = (label, fn) => btn(label, fn, { className: 'tile' });
@@ -240,7 +259,9 @@ function ui() {
   const wide = matchMedia('(min-width: 760px)').matches;
   view.setInset(content && wide ? el.offsetWidth + 10 : 0, content && !wide ? el.offsetHeight : 0);
 }
-function showFloor(i) { S.floor = i; const f = S.sel && find(S.house, S.sel); if (f && (f.kind === 'roof' ? i !== null : i !== null && f.index > i)) S.sel = null; draw(); ui(); }
+function showFloor(i) { S.floor = i; const f = S.sel && find(S.house, S.sel); if (f && (f.kind === 'roof' ? i !== null : i !== null && f.index > i)) S.sel = null;
+  cancelAnimationFrame(drawT); drawT = 0; view.build(S.house, { floor: shown() }); view.select(S.sel); view.frame(i !== null); ui();
+}
 
 // Pek og dra: trykk velger et objekt. Med «Flytt» på flytter dra det valgte objektet, ellers styrer dra kameraet.
 const cv = $('#view'); let down = null;
@@ -256,15 +277,16 @@ cv.addEventListener('pointermove', e => {
   if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) down.far = true;
   const g = down.drag;
   if (!g) { if (S.walk) view.look(e.clientX - down.px, e.clientY - down.py); down.px = e.clientX; down.py = e.clientY; return; }
-  const p = view.planePoint(e, g.y), f = find(S.house, S.sel); if (!p || !f) return;
-  const tx = snap(p.x - g.x), tz = snap(p.z - g.z), dx = tx - g.ax, dz = tz - g.az, it = f.item;
-  if (!dx && !dz) return;
-  g.ax = tx; g.az = tz;
+  const p = view.planePoint(e, g.y); if (!p) return;
+  const dx = snap(p.x - g.x), dz = snap(p.z - g.z);
+  if (dx === g.ax && dz === g.az) return;
+  g.ax = dx; g.az = dz; restore(); // hele flyttingen regnes fra der objektet sto da dra-bevegelsen startet
+  const f = find(S.house, S.sel), it = f?.item; if (!f) return;
   edit(() => {
     if (f.kind === 'furniture') { it.x = round(it.x + dx); it.z = round(it.z + dz); }
     else if (f.kind === 'room') reshapeRoom(f.floor, it, { x: it.x + dx, z: it.z + dz });
-    else if (f.kind === 'wall') { it.x1 = round(it.x1 + dx); it.x2 = round(it.x2 + dx); it.z1 = round(it.z1 + dz); it.z2 = round(it.z2 + dz); }
-    else if (f.kind === 'opening') { const w = f.wall, L = wallLength(w) || 1; it.pos = round(Math.min(L, Math.max(0, it.pos + (dx * (w.x2 - w.x1) + dz * (w.z2 - w.z1)) / L))); }
+    else if (f.kind === 'wall') shiftWall(f.floor, it, dx, dz);
+    else if (f.kind === 'opening') { const w = f.wall, L = wallLength(w) || 1; it.pos = round(it.pos + (dx * (w.x2 - w.x1) + dz * (w.z2 - w.z1)) / L); fitOpenings(w); }
   }, false);
   ui();
 });
@@ -275,6 +297,8 @@ const up = e => {
   else if (e.type === 'pointerup' && !d.far) { const hit = view.pick(e); if (S.placing) placeOn(hit); else if (S.sheet && !hit) sheet(null); else select(hit?.id); }
 };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+// Etter et trykk sender mobilnettlesere også et klikk. Panelet har da åpnet seg under fingeren, så klikket ville truffet «Slett» eller «Lukk». Stopp det.
+cv.addEventListener('touchend', e => e.cancelable && e.preventDefault(), { passive: false });
 
 $('#undo').onclick = () => {
   const s = S.undo.pop(); if (!s) return;
