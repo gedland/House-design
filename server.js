@@ -22,7 +22,7 @@ const SCHEMA = obj({
     name: T, height: N,
     rooms: list(obj({ name: T, x: N, z: N, w: N, d: N, material: MAT, color: COLOR })),
     walls: list(obj({ x1: N, z1: N, x2: N, z2: N, thickness: N, material: MAT, color: COLOR,
-      openings: list(obj({ type: one(['door', 'window']), pos: N, width: N, height: N, sill: N, color: COLOR })) })),
+      openings: list(obj({ type: one(['door', 'window']), pos: N, width: N, height: N, sill: N, material: MAT, color: COLOR })) })),
     furniture: list(obj({ type: one(FURNITURE), x: N, z: N, rot: N, w: N, d: N, h: N, material: MAT, color: COLOR })),
   })),
   roof: obj({ type: one(['gable', 'hip', 'flat']), pitch: N, overhang: N, material: MAT, color: COLOR }),
@@ -37,7 +37,7 @@ Rom: hvert rom er et rektangel med hjørnet (x, z), bredde w langs x og dybde d 
 
 Vegger: hver vegg er ett rett linjestykke fra (x1, z1) til (x2, z2) og skal ligge langs romkanter. Ta med ytterveggene rundt hele etasjen (thickness ca. 0.2–0.3) og innerveggene mellom rommene (ca. 0.1). En vegg som deles av to rom, skal bare stå én gang. Farge og materiale på yttervegger skal være fasadens.
 
-Åpninger: dører og vinduer ligger i veggen de står i. "pos" er avstanden i meter fra (x1, z1) til midten av åpningen, "sill" er høyden fra gulvet til underkanten (0 for dører). Hvert rom skal ha minst én dør, og ytterdøra skal være med. Plasser vinduene der bildene viser dem.
+Åpninger: dører og vinduer ligger i veggen de står i. "pos" er avstanden i meter fra (x1, z1) til midten av åpningen, "sill" er høyden fra gulvet til underkanten (0 for dører). "material" og "color" gjelder dørbladet eller vinduskarmen. Hvert rom skal ha minst én dør, og ytterdøra skal være med. Plasser vinduene der bildene viser dem.
 
 Møbler: ta med de store møblene som faktisk synes på bildene, høyst rundt 40 til sammen. x og z er møbelets midtpunkt, rot er grader rundt y-aksen (0 betyr at ryggen eller baksiden vender mot z = 0), w × d × h er bredde, dybde og høyde. Bruk "annet" for møbler som ikke passer noen type.
 
