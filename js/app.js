@@ -1,4 +1,4 @@
-import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom, shiftWall, setWallLength, fitOpenings, removeRoom } from './house.js';
+import { DEMO, MATERIALS, FURNITURE, OPENINGS, ROOFS, find, round, uid, normalize, bounds, wallLength, wallAngle, setWall, reshapeRoom, shiftWall, setWallLength, fitOpenings, removeRoom, inspect } from './house.js';
 import { createView } from './scene.js';
 
 const $ = s => document.querySelector(s);
@@ -400,7 +400,10 @@ async function importJSON(file) {
   try {
     const j = JSON.parse(await file.text());
     if (j?.version > 1) throw new Error('Den er laget i en nyere versjon av Husform. Oppdater appen og prøv igjen.');
-    replace(normalize(j));
+    if (j?.version === 1) return replace(normalize(j));
+    // Filen kommer fra et annet verktøy: oversett den, og la kontrollen tette det som mangler (tak, åpne yttervegger).
+    const { house, problems } = inspect(normalize(j), { final: true });
+    replace(house); say(`Filen var ikke laget i Husform og ble oversatt. ${problems.length ? `${problems[0].text} ` : ''}Sjekk at mål og plassering stemmer.`);
   } catch (e) { say(`Filen kunne ikke leses som et hus. ${e instanceof SyntaxError ? 'Den er ikke gyldig JSON.' : e.message}`); }
 }
 function moreSheet() {

@@ -72,13 +72,36 @@ const DEMO_RAW = {
   roof: { type: 'gable', pitch: 30, overhang: .4, material: 'takstein', color: '#3a3a3c' },
 };
 
+export const wallLength = w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1);
+// Oversetter en etasje skrevet med andre feltnavn til skjemaet over, så filer fra andre verktøy også blir et helt hus:
+// y for z, width/length/depth for w/d, vegger med start/end-punkter, og dører/vinduer i egne lister på etasjen
+// (med wallId og et punkt x,y) i stedet for som åpninger i veggen. Felt som alt følger skjemaet, røres ikke.
+const pick = (...vs) => { const v = vs.find(v => v !== undefined && v !== null && v !== '' && typeof v !== 'object' && isFinite(+v)); return v === undefined ? undefined : +v; };
+const point = p => Array.isArray(p) ? [pick(p[0]), pick(p[1])] : p && typeof p === 'object' ? [pick(p.x), pick(p.z, p.y)] : [];
+function adapt(f) {
+  if (!f || typeof f !== 'object') return {};
+  const list = a => Array.isArray(a) ? a.filter(o => o && typeof o === 'object') : [], isDoor = o => /door|dør/i.test(o.type);
+  const rooms = list(f.rooms).map(r => ({ ...(!r.material && !r.color && /bad|bath|vask|utility|laundry|wc|toalett|dusj/i.test(`${r.type} ${r.name}`) ? { material: 'flis', color: '#aeb4b5' } : {}),
+    ...r, z: pick(r.z, r.y), w: pick(r.w, r.width), d: pick(r.d, r.depth, r.length) }));
+  const walls = list(f.walls).map(w => { const [ax, az] = point(w.start ?? w.from), [bx, bz] = point(w.end ?? w.to);
+    return { ...w, x1: pick(w.x1, ax), z1: pick(w.z1, w.y1, az), x2: pick(w.x2, bx), z2: pick(w.z2, w.y2, bz), openings: list(w.openings).map(o => ({ ...o, pos: pick(o.pos, o.position, o.offset) })) }; });
+  const real = walls.filter(w => [w.x1, w.z1, w.x2, w.z2].every(v => v !== undefined) && wallLength(w) >= .1);
+  const place = (o, w) => { const L = wallLength(w), t = ((o.x - w.x1) * (w.x2 - w.x1) + (o.z - w.z1) * (w.z2 - w.z1)) / L; return { t, off: Math.hypot(o.x - w.x1 - (w.x2 - w.x1) * t / L, o.z - w.z1 - (w.z2 - w.z1) * t / L) + Math.max(0, -t, t - L) }; };
+  for (const [o, type] of [...list(f.doors).map(o => [o, 'door']), ...list(f.windows).map(o => [o, isDoor(o) ? 'door' : 'window']), ...list(f.openings).map(o => [o, isDoor(o) ? 'door' : 'window'])]) {
+    const at = { x: pick(o.x), z: pick(o.z, o.y) }, has = at.x !== undefined && at.z !== undefined, ref = o.wallId ?? o.wall_id ?? o.wall;
+    const w = real.find(w => w.id !== undefined && w.id === ref) || (has ? real.reduce((b, w) => !b || place(at, w).off < place(at, b).off ? w : b, null) : null);
+    if (w) w.openings.push({ ...o, type, pos: pick(o.pos, o.position, o.offset) ?? (has ? place(at, w).t : wallLength(w) / 2) });
+  }
+  return { ...f, rooms, walls, furniture: list(f.furniture).map(m => ({ ...m, z: pick(m.z, m.y), w: pick(m.w, m.width), d: pick(m.d, m.depth, m.length), h: pick(m.h, m.height), rot: pick(m.rot, m.rotation) })) };
+}
+
 // Gjør et hvilket som helst hus-objekt (fra AI, fil eller lagring) gyldig: fyller inn id-er og standarder, og holder tallene innenfor rimelige grenser.
 export function normalize(h) {
   const seen = new Set();
   const id = (o, p) => { const v = typeof o.id === 'string' && o.id && !seen.has(o.id) ? o.id : uid(p); seen.add(v); return v; };
   const n = (v, d, min = -500, max = 500) => Math.min(max, Math.max(min, v !== null && v !== '' && isFinite(+v) ? round(+v) : d));
   const col = (c, d) => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : d, mt = (v, d) => MATERIALS[v] ? v : d, arr = a => Array.isArray(a) ? a : [];
-  const floors = arr(h?.floors).slice(0, 5).map((f, i) => ({
+  const floors = arr(h?.floors).slice(0, 5).map(adapt).map((f, i) => ({
     id: id(f, 'f'), name: String(f.name || `${i + 1}. etasje`).slice(0, 40), height: n(f.height, 2.4, 1, 6),
     rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'tre'), color: col(r.color, '#c8a57a') })),
     walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), exterior: typeof w.exterior === 'boolean' ? w.exterior : +w.thickness >= .15, material: mt(w.material, 'maling'), color: col(w.color, P),
@@ -110,7 +133,6 @@ export function find(house, id) {
   }
   return null;
 }
-export const wallLength = w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1);
 export const wallAngle = w => Math.round(Math.atan2(w.z2 - w.z1, w.x2 - w.x1) * 180 / Math.PI);
 // Endrer lengde og/eller retning på en vegg. Startpunktet (x1,z1) står stille.
 export function setWall(w, len, deg) {
