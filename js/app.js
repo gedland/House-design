@@ -16,10 +16,11 @@ catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebG
 const DB = new Promise((ok, no) => { const r = indexedDB.open('husform', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
 const db = (mode, fn) => DB.then(d => new Promise((ok, no) => { const q = fn(d.transaction('kv', mode).objectStore('kv')); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); })).catch(() => null);
 let saveT;
-const write = () => { clearTimeout(saveT); saveT = 0; return db('readwrite', s => s.put(S.house, 'house')); };
+const write = () => { clearTimeout(saveT); saveT = 0; return db('readwrite', s => s.put(S.house, 'house')).then(() => localStorage.removeItem('husformUnsaved')); };
 const save = () => { clearTimeout(saveT); saveT = setTimeout(write, 300); };
-// Lukkes eller skjules siden før lagringen har rukket å gå, lagres det med en gang.
-const flush = () => { commit(); if (saveT) write(); };
+// Lukkes eller skjules siden før lagringen har rukket å gå, lagres det med en gang. IndexedDB rekker ikke alltid å skrive mens siden lukkes,
+// så huset legges også i localStorage (som skriver straks) og hentes derfra ved neste start.
+const flush = () => { commit(); if (!saveT) return; try { localStorage.husformUnsaved = JSON.stringify(S.house); } catch {} write(); };
 addEventListener('pagehide', flush); document.addEventListener('visibilitychange', () => document.hidden && flush());
 
 // Alle endringer går gjennom edit(): JSON endres, 3D tegnes på nytt. commit() lagrer og legger et angre-steg.
@@ -88,7 +89,7 @@ function selectionPanel(f) {
       edit(() => setValue(find(S.house, S.sel), d.key, val), false);
       if (d.key === 'type') { commit(); ui(); } else if (d.key === 'name') $('#panel h2').textContent = title(find(S.house, S.sel));
     };
-    input.onchange = () => { commit(); const f = find(S.house, S.sel); if (f && d.type === 'number') input.value = getValue(f, d.key); }; // viser verdien som faktisk ble brukt
+    input.onchange = () => { commit(); const f = find(S.house, S.sel); if (f && d.type === 'number' && getValue(f, d.key) !== undefined) input.value = getValue(f, d.key); }; // viser verdien som faktisk ble brukt
     return h('label', { className: d.wide ? 'wide' : '' }, h('span', { textContent: d.label }), input);
   });
   return [head(KIND[f.kind], title(f), () => select(null)),
@@ -313,5 +314,6 @@ matchMedia('(min-width: 760px)').addEventListener('change', ui);
 fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; if (S.sheet === 'photos') ui(); }).catch(() => {});
 db('readonly', s => s.get('house')).then(saved => {
   try { if (saved?.version === 1) S.house = normalize(saved); } catch {}
+  try { if (localStorage.husformUnsaved) { S.house = normalize(JSON.parse(localStorage.husformUnsaved)); write(); } } catch {}
   view.build(S.house, { floor: null }); view.frame(); ui(); window.husformReady = true;
 });
