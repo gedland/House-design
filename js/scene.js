@@ -85,9 +85,9 @@ function buildWall(w, H, [e0, e1] = [0, 0], base = 0) {
     const a = Math.max(at, o.pos - o.width / 2), b = Math.min(end, o.pos + o.width / 2), sill = Math.min(o.sill, H - .3), top = Math.min(H, sill + o.height);
     if (b - a < .05) continue;
     solid(at, a, -base, H); solid(a, b, sill ? -base : 0, sill); solid(a, b, top, H); at = b;
-    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - sill, f = .06, fm = mat('maling', o.color);
+    const og = tag(new THREE.Group(), o.id, 'opening', o.type === 'door' ? 'Dør' : 'Vindu'), ww = b - a, hh = top - sill, f = .06, fm = mat(o.material, o.color);
     og.position.set((a + b) / 2, sill, 0);
-    if (o.type === 'door') { box(og, ww, hh, .05, 0, 0, 0, mat('tre', o.color)); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
+    if (o.type === 'door') { box(og, ww, hh, .05, 0, 0, 0, fm); box(og, .03, .12, .12, ww / 2 - .1, Math.min(1, hh / 2), 0, mat('metall', '#b9b9b4')); }
     else {
       box(og, ww - f, hh - f, .02, 0, f / 2, 0, mat('glass', '#bcd7e6'));
       box(og, ww, f, t + .02, 0, 0, 0, fm); box(og, ww, f, t + .02, 0, hh - f, 0, fm);
@@ -337,12 +337,13 @@ export function createView(canvas) {
     });
     invalidate();
   }
-  function frame() {
+  // steep = se bratt ned, slik at veggene ikke skjuler gulv og møbler når taket er tatt av.
+  function frame(steep) {
     if (walk.on) return;
     const b = new THREE.Box3().setFromObject(root); if (b.isEmpty()) b.set(new THREE.Vector3(-2, 0, -2), new THREE.Vector3(2, 2, 2));
     const c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
-    const dist = r / Math.sin(camera.fov * Math.PI / 360) * (camera.aspect < 1 ? 1.15 / camera.aspect ** .6 : 1.05);
-    controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(.45, .75, .8).normalize().multiplyScalar(dist));
+    const dist = r / Math.sin(camera.fov * Math.PI / 360) * (camera.aspect < 1 ? 1.15 / camera.aspect ** .6 : 1.05) * (steep ? 1.12 : 1);
+    controls.target.copy(c); camera.position.copy(c).add(new THREE.Vector3(...(steep ? [.12, 1, .25] : [.45, .75, .8])).normalize().multiplyScalar(dist));
     sun.target.position.copy(c); sun.position.copy(c).add(new THREE.Vector3(-9, 16, 7)); controls.update(); invalidate();
   }
   // Interiørmodus: kameraet står i øyehøyde og styres med se() og gå().
