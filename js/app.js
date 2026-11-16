@@ -14,27 +14,54 @@ catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebG
 
 // Lagring i IndexedDB
 const DB = new Promise((ok, no) => { const r = indexedDB.open('husform', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
-const db = (mode, fn) => DB.then(d => new Promise((ok, no) => { const q = fn(d.transaction('kv', mode).objectStore('kv')); q.onsuccess = () => ok(q.result); q.onerror = () => no(q.error); })).catch(() => null);
-let saveT;
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => db('readwrite', s => s.put(S.house, 'house')), 300); };
+const db = (mode, fn) => DB.then(d => new Promise((ok, no) => { const tx = d.transaction('kv', mode), q = fn(tx.objectStore('kv')); tx.oncomplete = () => ok(q.result); tx.onerror = tx.onabort = () => no(tx.error || q.error); }));
+// save() venter litt mens brukeren skriver eller drar, save(true) lagrer med en gang. Feiler lagringen, får brukeren vite det én gang.
+let saveT = 0, saveFailed = false;
+function save(now) {
+  clearTimeout(saveT); saveT = 0;
+  if (!now) { saveT = setTimeout(save, 300, true); return; }
+  db('readwrite', s => s.put(S.house, 'house')).then(() => { saveFailed = false; try { localStorage.removeItem('husformUnsaved'); } catch {} }, () => {
+    if (saveFailed) return; saveFailed = true;
+    say('Huset kunne ikke lagres i nettleseren (privat modus eller fullt lager). Bruk «Mer» og «Eksporter JSON» for å ta vare på det.');
+  });
+}
+// Lagrer det som ikke er lagret ennå, f.eks. et felt brukeren står i når siden lukkes eller lastes på nytt.
+// IndexedDB rekker ikke alltid å skrive mens siden lukkes, så huset legges også synkront i localStorage og hentes derfra ved neste start.
+function flush() {
+  const unsaved = S.pending || saveT; commit();
+  if (unsaved) { try { localStorage.husformUnsaved = JSON.stringify(S.house); } catch {} save(true); }
+}
+addEventListener('pagehide', flush); document.addEventListener('visibilitychange', () => document.hidden && flush());
+// Sammenligner to verdier uten å bry seg om rekkefølgen på nøklene.
+const same = (a, b) => a === b || (!!a && !!b && typeof a === 'object' && typeof b === 'object' && Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(k => same(a[k], b[k])));
 
 // Alle endringer går gjennom edit(): JSON endres, 3D tegnes på nytt. commit() lagrer og legger et angre-steg.
 let drawT = 0;
 const shown = () => S.walk ? null : S.floor;
 function draw() { if (drawT) return; drawT = requestAnimationFrame(() => { drawT = 0; view.build(S.house, { floor: shown() }); view.select(S.sel); }); }
-function edit(fn, done = true) { S.pending ??= JSON.stringify(S.house); fn(); draw(); if (done) commit(); }
+function edit(fn, done = true) { S.pending ??= JSON.stringify(S.house); fn(); draw(); if (done) commit(); else save(); }
 // Mens et felt skrives i eller et objekt dras, regnes hver endring fra huset slik det var før, så mellomtrinn ikke setter spor.
 function restore() { if (S.pending) S.house = JSON.parse(S.pending); }
+// Huset går gjennom normalize() ved hver commit, så JSON-en som lagres og eksporteres alltid er den samme som leses inn igjen.
+// Verdier utenfor grensene (f.eks. 12 m takhøyde) rettes her, og da tegnes panelet på nytt så feltet viser den rettede verdien.
 function commit() {
-  if (S.pending && S.pending !== JSON.stringify(S.house)) { S.undo.push(S.pending); if (S.undo.length > 50) S.undo.shift(); save(); }
-  S.pending = null; $('#undo').disabled = !S.undo.length;
+  const before = S.pending; S.pending = null;
+  if (before) {
+    const raw = S.house; try { S.house = normalize(raw); } catch {}
+    if (before !== JSON.stringify(S.house)) { S.undo.push(before); if (S.undo.length > 50) S.undo.shift(); }
+    save(true);
+    if (!same(raw, S.house)) { draw(); ui(); }
+  }
+  $('#undo').disabled = !S.undo.length;
 }
 // Bytter ut hele huset. Det gamle huset blir et angre-steg.
 function replace(house) {
-  S.undo.push(JSON.stringify(S.house)); S.house = house; S.sel = null; S.move = false; S.floor = null; S.sheet = null; S.pending = null;
-  $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(); ui(); save();
+  S.undo.push(S.pending || JSON.stringify(S.house)); if (S.undo.length > 50) S.undo.shift();
+  S.house = house; S.sel = null; S.move = false; S.floor = null; S.sheet = null; S.pending = null; S.placing = null; S.note = '';
+  $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(); ui(); save(true);
 }
 function select(id) {
+  commit();
   if (id !== S.sel) S.move = false;
   S.sel = id && find(S.house, id) ? id : null; if (S.sel) { S.sheet = null; localStorage.tipSeen = 1; }
   draw(); ui();
@@ -81,10 +108,10 @@ function selectionPanel(f) {
     const v = getValue(f, d.key);
     const input = d.type === 'select'
       ? h('select', {}, d.options.map(([value, label]) => h('option', { value, textContent: label, selected: value === v })))
-      : h('input', { type: d.type, value: v ?? '', ...(d.type === 'number' ? { min: d.min, max: d.max, step: d.step, inputMode: 'decimal' } : {}) });
+      : h('input', { type: d.type, value: v ?? '', ...(d.type === 'text' ? { maxLength: 40 } : {}), ...(d.type === 'number' ? { min: d.min, max: d.max, step: d.step, inputMode: 'decimal' } : {}) });
     input.oninput = () => {
       let val = input.value;
-      if (d.type === 'number') { val = parseFloat(val.replace(',', '.')); if (!isFinite(val) || val < d.min) return; val = Math.min(val, d.max); }
+      if (d.type === 'number') { val = round(parseFloat(val.replace(',', '.'))); if (!isFinite(val) || val < d.min) return; val = Math.min(val, d.max); }
       restore(); edit(() => { if (setValue(find(S.house, S.sel), d.key, val) === false) restore(); }, false); sync();
       if (d.key === 'name' || d.key === 'type') $('#panel h2').textContent = title(find(S.house, S.sel));
     };
@@ -191,7 +218,8 @@ function photoSheet() {
 }
 
 // Eksport og import
-const fileName = ext => `${S.house.name.replace(/[^\wæøå]+/gi, '-').replace(/^-|-$/g, '') || 'hus'}.${ext}`;
+// Filnavn med bare a–z og tall, så nedlastingen får riktig navn på alle telefoner og maskiner.
+const fileName = ext => `${S.house.name.replace(/[æÆ]/g, 'ae').replace(/[øØ]/g, 'o').replace(/[åÅ]/g, 'a').normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') || 'hus'}.${ext}`;
 function download(blob, name) { const a = h('a', { href: URL.createObjectURL(blob), download: name }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
 async function exportGLB() {
   say('Lager GLB …');
@@ -204,7 +232,11 @@ async function exportGLB() {
   draw();
 }
 async function importJSON(file) {
-  try { replace(normalize(JSON.parse(await file.text()))); } catch (e) { say(`Filen kunne ikke leses som et hus. ${e instanceof SyntaxError ? 'Den er ikke gyldig JSON.' : e.message}`); }
+  try {
+    const j = JSON.parse(await file.text());
+    if (j?.version > 1) throw new Error('Den er laget i en nyere versjon av Husform. Oppdater appen og prøv igjen.');
+    replace(normalize(j));
+  } catch (e) { say(`Filen kunne ikke leses som et hus. ${e instanceof SyntaxError ? 'Den er ikke gyldig JSON.' : e.message}`); }
 }
 function moreSheet() {
   const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: e => e.target.files[0] && importJSON(e.target.files[0]) });
@@ -218,7 +250,7 @@ function moreSheet() {
       S.floor !== null && S.house.floors.length > 1 && btn(`Slett ${S.house.floors[S.floor].name}`, removeFloor, { className: 'danger' }),
       btn('Åpne demohuset', () => { if (confirm('Bytte ut huset med demohuset? Du kan angre etterpå.')) replace(clone(DEMO)); }))];
 }
-function sheet(name) { S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
+function sheet(name) { commit(); S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
 
 // Interiørmodus
 function enter() {
@@ -299,11 +331,12 @@ cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('touchend', e => e.cancelable && e.preventDefault(), { passive: false });
 
 $('#undo').onclick = () => {
+  commit();
   const s = S.undo.pop(); if (!s) return;
   S.house = JSON.parse(s); S.pending = null; $('#undo').disabled = !S.undo.length;
   if (S.walk && !S.house.floors[S.walk.floor]) leave();
   if (S.floor !== null && !S.house.floors[S.floor]) S.floor = null;
-  select(S.sel); save();
+  select(S.sel); save(true);
 };
 $('#b-photos').onclick = () => sheet('photos'); $('#b-add').onclick = () => sheet('add'); $('#b-more').onclick = () => sheet('more'); $('#b-walk').onclick = enter;
 addEventListener('keydown', e => {
@@ -320,7 +353,9 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { doc
 matchMedia('(min-width: 760px)').addEventListener('change', ui);
 
 fetch('api/status').then(r => r.json()).then(j => { S.ai = !!j.ai; if (S.sheet === 'photos') ui(); }).catch(() => {});
-db('readonly', s => s.get('house')).then(saved => {
-  try { if (saved?.version === 1) S.house = normalize(saved); } catch {}
+db('readonly', s => s.get('house')).catch(() => null).then(saved => {
+  let unsaved; try { unsaved = JSON.parse(localStorage.husformUnsaved); } catch {}
+  try { if ((unsaved || saved)?.version === 1) S.house = normalize(unsaved || saved); } catch {}
+  if (unsaved) save(true);
   view.build(S.house, { floor: null }); view.frame(); ui(); window.husformReady = true;
 });
