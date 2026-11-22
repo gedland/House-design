@@ -28,3 +28,39 @@ Serveren har ingen innlogging. Legger du den åpent på nettet, kan alle som fin
 - `server.js`: statiske filer og `POST /api/analyze`. Svaret strømmes som linjer med JSON (fremdrift, så huset eller en feil).
 
 Ved endringer i filene: øk `VERSION` i `service-worker.js`.
+
+## Skjermbilder (for utvikling)
+`tools/bilder.js` tar skjermbilder av demohuset fra faste kameravinkler, så du kan sammenligne før og etter en endring. Skriptet er ikke en del av appen og endrer ingen appfiler.
+
+Første gang (installerer Playwright og Three.js i `tools/node_modules`, og nettleseren Playwright bruker):
+```bash
+npm install --prefix tools
+npx --prefix tools playwright install chromium
+```
+Ta bilder:
+```bash
+node tools/bilder.js            # eller med et navn: node tools/bilder.js for-tak
+```
+Bildene havner i `tools/bilder/<dato>_<tid>[-navn]/` (ikke i git). Kjør én gang før endringen og én gang etter, og sammenlign mappene. Skriptet skriver også hvilken kjøring som var den forrige. Hver mappe har tolv bilder, i 1280×800 (`-desktop`) og 390×844 (`-mobil`):
+
+| Fil | Vinkel |
+|---|---|
+| `hus-dag` | Hele huset utenfra, lyst tema |
+| `hus-kveld` | Samme vinkel, mørkt tema (appen har ikke eget kveldslys) |
+| `etasje-1` (og `etasje-2` …) | Etasjevisning ovenfra, uten tak |
+| `stue-vindu` | Inne i stua, mot det bredeste vinduet |
+| `stue-kjokken` | Inne i stua, mot døren til kjøkkenet |
+| `soverom` | Fra hjørnet ved døren, på skrå over rommet |
+
+`info.json` i mappen viser commit, filer som ikke er committet, og om Three.js kom fra CDN eller fra npm.
+
+Vinklene regnes ut fra demohuset i `js/house.js`: rommene finnes etter navn (Stue, Kjøkken, Soverom), vinduer og dører etter hvor de står. Endres demohuset, flytter vinklene seg med. Finnes ikke et rom, hoppes bildet over, og skriptet sier fra.
+
+Skriptet starter sin egen filtjener for repoet, så det trengs verken `node server.js` eller API-nøkkel. Three.js hentes fra CDN-en i importmap-en. Er CDN-en blokkert, brukes npm-pakken i `tools/node_modules/three` i stedet. Versjonen i `tools/package.json` må være den samme som i `index.html`, ellers advarer skriptet.
+
+Valg:
+- `--lokal`: bruk Three.js fra npm med en gang, uten å prøve CDN-en.
+- `--url http://localhost:3000`: ta bilder av en app som allerede kjører, i stedet for den innebygde filtjeneren.
+- `--skala 1`: pikseltetthet (standard 2). 1 gir mindre filer og går omtrent dobbelt så fort.
+- `--ut <mappe>`: lagre et annet sted enn `tools/bilder`.
+- `--chromium <sti>` (eller `CHROMIUM_PATH`): bruk en Chrome eller Chromium du allerede har.

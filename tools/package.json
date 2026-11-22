@@ -1,0 +1,11 @@
+{
+  "name": "husform-verktoy",
+  "private": true,
+  "description": "Hjelpeskript for utvikling. Ikke en del av appen.",
+  "type": "module",
+  "scripts": { "bilder": "node bilder.js" },
+  "devDependencies": {
+    "playwright": "^1.50.0",
+    "three": "0.170.0"
+  }
+}
