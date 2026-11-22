@@ -58,7 +58,7 @@ function commit() {
 function replace(house) {
   S.undo.push(S.pending || JSON.stringify(S.house)); if (S.undo.length > 50) S.undo.shift();
   S.house = house; S.sel = null; S.move = false; S.floor = null; S.sheet = null; S.pending = null; S.placing = null; S.note = '';
-  $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(); ui(); save(true);
+  $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(false, { intro: true }); ui(); save(true);
 }
 function select(id) {
   commit();
@@ -421,15 +421,33 @@ function moreSheet() {
 function sheet(name) { commit(); S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
 
 // Interiørmodus
+const inRoom = (f, x, z) => f.rooms.find(r => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d);
+// Kameraet flyr inn gjennom det største vinduet i det største rommet (eller en ytterdør), og ender et stykke inn i rommet med blikket innover.
+function entrance(f, i) {
+  const big = [...f.rooms].sort((a, b) => b.w * b.d - a.w * a.d)[0]; let best = null;
+  for (const w of f.walls) if (w.exterior) for (const o of w.openings) {
+    const L = wallLength(w), ux = (w.x2 - w.x1) / L, uz = (w.z2 - w.z1) / L, side = o.width > 1 ? o.width * .25 : 0; // utenom midtposten i brede vinduer
+    const wx = w.x1 + ux * (o.pos + side), wz = w.z1 + uz * (o.pos + side);
+    let nx = uz, nz = -ux, room = inRoom(f, wx - nx * .4, wz - nz * .4); // n = utover
+    if (!room) { room = inRoom(f, wx + nx * .4, wz + nz * .4); if (!room) continue; nx = -nx; nz = -nz; }
+    const score = (o.type === 'window' ? o.width * o.height : .3) + (room === big ? 5 : 0);
+    if (!best || score > best.score) best = { score, wx, wz, nx, nz, o, room };
+  }
+  if (!best) return null;
+  const { wx, wz, nx, nz, o, room } = best, y = floorY(i) + o.sill + Math.min(o.height / 2, 1.4);
+  const deep = Math.min(.6, (Math.abs(nx) > .5 ? room.w : room.d) * .3); // like innenfor vinduet, så du ser mest mulig av rommet
+  return [{ x: wx - nx * deep, z: wz - nz * deep, y: eye(i), yaw: Math.atan2(nx, nz), pitch: -.15 }, { out: [wx + nx * 3, y, wz + nz * 3], at: [wx, y, wz] }];
+}
 function enter() {
   const i = S.floor ?? 0, f = S.house.floors[i], r = [...f.rooms].sort((a, b) => b.w * b.d - a.w * a.d)[0], b = bounds(f);
-  // Start i den ene enden av det største rommet, med blikket langs rommet.
+  // Uten ytterdør eller vindu: start i den ene enden av det største rommet, med blikket langs rommet.
   const long = r && r.w >= r.d, x = r ? r.x + r.w * (long ? .2 : .5) : b ? (b.x0 + b.x1) / 2 : 0, z = r ? r.z + r.d * (long ? .5 : .8) : b ? (b.z0 + b.z1) / 2 : 0;
   S.walk = { floor: i }; S.sheet = null; S.placing = null;
-  view.build(S.house, { floor: null }); view.setWalk({ x, z, y: eye(i), yaw: long ? -Math.PI / 2 : 0 }); select(null);
+  view.build(S.house, { floor: null }); view.setWalk(...(entrance(f, i) || [{ x, z, y: eye(i), yaw: long ? -Math.PI / 2 : 0 }])); select(null);
 }
-const eye = i => S.house.floors.slice(0, i).reduce((s, f) => s + f.height, 0) + Math.min(1.6, S.house.floors[i].height - .3);
-function leave() { S.walk = null; stick(0, 0); view.setWalk(null); draw(); ui(); }
+const floorY = i => S.house.floors.slice(0, i).reduce((s, f) => s + f.height, 0);
+const eye = i => floorY(i) + Math.min(1.6, S.house.floors[i].height - .3);
+function leave() { S.walk = null; S.here = null; stick(0, 0); view.setWalk(null); draw(); ui(); }
 function climb(d) {
   const i = S.walk.floor + d; if (!S.house.floors[i]) return;
   S.walk.floor = i; const p = view.camera.position; view.setWalk({ x: p.x, z: p.z, y: eye(i) }); ui();
@@ -460,7 +478,75 @@ function ui() {
     : [chip('Hele huset', S.floor === null, () => showFloor(null)), ...fl.map((x, i) => chip(x.name, S.floor === i, () => showFloor(i)))]).filter(Boolean));
   const wide = matchMedia('(min-width: 760px)').matches;
   view.setInset(content && wide ? el.offsetWidth + 10 : 0, content && !wide ? el.offsetHeight : 0);
+  setLabels(); caption();
 }
+
+// Romnavn som svever i rommene. I etasjevisningen velger et trykk rommet, inne i huset går du dit.
+// Et navn vises bare når ingen vegg, gulv eller tak står mellom kameraet og rommet.
+let labels = [], labelKey = '';
+function setLabels() {
+  const i = S.walk ? S.walk.floor : S.floor, f = i !== null && S.house.floors[i];
+  const rooms = f && !S.placing && !S.move ? f.rooms : [], y = f ? (S.walk ? eye(i) - .25 : floorY(i) + 1) : 0;
+  const key = JSON.stringify([!!S.walk, i, rooms.map(r => [r.id, r.name, r.x, r.z, r.w, r.d])]);
+  if (key === labelKey) return; labelKey = key;
+  labels = rooms.map(r => {
+    // Punkter i rommet, midten først. Navnet står på det første som synes, så et rom du bare ser litt av gjennom en døråpning også får navn.
+    const pts = [0, -.3, .3].flatMap(a => [0, -.3, .3].map(b => [r.x + r.w * (.5 + a), r.z + r.d * (.5 + b)])).sort((p, q) => Math.hypot(p[0] - r.x - r.w / 2, p[1] - r.z - r.d / 2) - Math.hypot(q[0] - r.x - r.w / 2, q[1] - r.z - r.d / 2));
+    const l = { r, y, pts };
+    l.el = btn(r.name, () => S.walk ? view.walkTo(...pts[0]) : select(r.id), { className: 'label off', ariaLabel: S.walk ? `Gå til ${r.name}` : `Velg ${r.name}` });
+    return l;
+  });
+  $('#labels').replaceChildren(...labels.map(l => l.el));
+  view.invalidate();
+}
+function placeLabels() {
+  const p = view.camera.position, f = S.walk && S.house.floors[S.walk.floor], here = f && inRoom(f, p.x, p.z);
+  for (const l of labels) {
+    l.s = null;
+    if (l.r !== here) for (const [x, z] of l.pts) { const q = view.screen(x, l.y, z); if (q && !view.hidden(x, l.y, z)) { l.s = q; l.d = Math.hypot(x - p.x, z - p.z); break; } }
+  }
+  // Nærmeste rom først. Et navn som ville havnet oppå et annet, skjules.
+  const taken = [];
+  for (const l of [...labels].sort((a, b) => (a.s ? a.d : 1e9) - (b.s ? b.d : 1e9))) {
+    const s = l.s, w = (l.w ||= l.el.offsetWidth) / 2 + 4, hh = 20;
+    const ok = s && !taken.some(([x, y, tw]) => Math.abs(x - s[0]) < tw + w && Math.abs(y - s[1]) < hh);
+    if (ok) taken.push([s[0], s[1], w]);
+    l.el.classList.toggle('off', !ok);
+    if (s) l.el.style.transform = `translate(${s[0].toFixed(1)}px, ${s[1].toFixed(1)}px) translate(-50%, -50%)`;
+  }
+  if (S.walk && here !== S.here) { S.here = here; caption(); }
+}
+view.onFrame = placeLabels;
+
+// Bildetekst øverst til venstre: hva du ser på, med anslåtte mål.
+const m2 = rooms => Math.round(rooms.reduce((s, r) => s + r.w * r.d, 0));
+const metres = v => v.toFixed(1).replace('.', ',');
+function caption() {
+  const fl = S.house.floors, all = fl.flatMap(f => f.rooms), rooms = n => `${n} rom`;
+  let small, big, sub;
+  if (S.walk) {
+    const f = fl[S.walk.floor], r = S.here;
+    small = f.name; big = r ? r.name : 'Inne i huset';
+    sub = r ? `${metres(r.w)} × ${metres(r.d)} m, anslått` : 'Dra for å se deg om. Trykk på et romnavn for å gå dit.';
+  } else if (S.floor !== null) {
+    const f = fl[S.floor]; small = `Etasje ${S.floor + 1} av ${fl.length}`; big = f.name; sub = `${rooms(f.rooms.length)} · ca. ${m2(f.rooms)} m²`;
+  } else {
+    small = `${fl.length} ${fl.length === 1 ? 'etasje' : 'etasjer'} · ${rooms(all.length)}`; big = S.house.name; sub = `Ca. ${m2(all)} m². Målene er anslag.`;
+  }
+  const c = $('#caption'); c.children[0].textContent = small; c.children[1].textContent = big; c.children[2].textContent = sub;
+}
+
+// Dag- og kveldslys. Valget huskes i nettleseren; uten valg følger det mørk eller lys modus.
+const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>';
+const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>';
+let mood = (() => { try { return localStorage.husformMood; } catch {} })() || (document.documentElement.dataset.theme === 'dark' ? 'evening' : 'day');
+function setMood(m, keep) {
+  mood = m; view.setMood(m); if (keep) try { localStorage.husformMood = m; } catch {}
+  const b = $('#mood'), night = m === 'evening', label = night ? 'Dagslys' : 'Kveldslys';
+  b.innerHTML = night ? SUN : MOON; b.ariaPressed = String(night); b.ariaLabel = label; b.title = label;
+}
+$('#mood').onclick = () => setMood(mood === 'evening' ? 'day' : 'evening', true);
+setMood(mood);
 function showFloor(i) { S.floor = i; const f = S.sel && find(S.house, S.sel); if (f && (f.kind === 'roof' ? i !== null : i !== null && f.index > i)) S.sel = null;
   cancelAnimationFrame(drawT); drawT = 0; view.build(S.house, { floor: shown() }); view.select(S.sel); view.frame(i !== null); ui();
 }
@@ -521,7 +607,11 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { if (keys.delete(e.key.toLowerCase())) keyMove(); });
 addEventListener('blur', () => { keys.clear(); if (S.walk) stick(0, 0); });
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { document.documentElement.dataset.theme = e.matches ? 'dark' : 'light'; view.theme(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+  document.documentElement.dataset.theme = e.matches ? 'dark' : 'light'; view.theme();
+  let saved; try { saved = localStorage.husformMood; } catch {}
+  if (!saved) setMood(e.matches ? 'evening' : 'day');
+});
 matchMedia('(min-width: 760px)').addEventListener('change', ui);
 
 checkServer();
@@ -529,5 +619,5 @@ db('readonly', s => s.get('house')).catch(() => null).then(saved => {
   let unsaved; try { unsaved = JSON.parse(localStorage.husformUnsaved); } catch {}
   try { if ((unsaved || saved)?.version === 1) S.house = normalize(unsaved || saved); } catch {}
   if (unsaved) save(true);
-  view.build(S.house, { floor: null }); view.frame(); ui(); window.husformReady = true;
+  view.build(S.house, { floor: null }); view.frame(false, { intro: true }); ui(); window.husformReady = true;
 });
