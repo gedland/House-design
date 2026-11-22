@@ -44,13 +44,16 @@
 </head>
 <body>
 <canvas id="view" aria-label="3D-visning av huset"></canvas>
+<div id="labels" aria-label="Rom"></div>
 <header>
   <h1>Husform</h1>
+  <button id="mood" type="button" class="round" aria-pressed="false" aria-label="Kveldslys" title="Kveldslys"></button>
   <button id="undo" type="button" disabled>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5 3.5 9.5 8 14M4 9.5h10a6 6 0 0 1 0 12h-3"/></svg>Angre
   </button>
 </header>
 <nav id="floors" aria-label="Visning"></nav>
+<section id="caption" aria-live="polite"><small></small><strong></strong><span></span></section>
 <p id="tip">Trykk på en vegg, et gulv, et vindu eller et møbel for å endre det.</p>
 <div id="banner" role="status"></div>
 <div id="stick" aria-label="Gå"><i id="knob"></i></div>

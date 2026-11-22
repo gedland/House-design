@@ -1,4 +1,5 @@
 :root {
+  --glass: oklch(0.99 0.004 85 / .68); --glass-line: oklch(1 0 0 / .55); --blur: blur(18px) saturate(1.6);
   --surface: oklch(0.992 0.004 85); --well: oklch(0.945 0.008 85);
   --ink: oklch(0.25 0.012 70); --muted: oklch(0.46 0.012 70); --line: oklch(0.87 0.009 85);
   --accent: oklch(0.42 0.055 160); --on-accent: oklch(0.98 0.01 160); --tint: oklch(0.93 0.025 160);
@@ -6,6 +7,7 @@
   color-scheme: light;
 }
 [data-theme=dark] {
+  --glass: oklch(0.22 0.008 70 / .62); --glass-line: oklch(1 0 0 / .1);
   --surface: oklch(0.24 0.007 70); --well: oklch(0.19 0.006 70);
   --ink: oklch(0.93 0.006 85); --muted: oklch(0.74 0.01 85); --line: oklch(0.34 0.008 70);
   --accent: oklch(0.8 0.07 160); --on-accent: oklch(0.2 0.03 160); --tint: oklch(0.31 0.03 160);
@@ -27,20 +29,24 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 header { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: calc(env(safe-area-inset-left) + 10px); right: calc(env(safe-area-inset-right) + 10px);
   display: flex; align-items: center; gap: 6px; pointer-events: none; }
 header > * { pointer-events: auto; }
-h1 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin-right: auto; padding: 9px 14px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); }
-header button { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; font-weight: 500; font-size: 15px; background: var(--surface); box-shadow: var(--shadow); }
+/* Frostet glass over 3D-visningen, så huset synes gjennom knappene og panelene. */
+h1, header button, #floors button, #bar, #tip, #banner, #caption, #stick { background: var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); box-shadow: inset 0 0 0 1px var(--glass-line), var(--shadow); }
+h1 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin-right: auto; padding: 9px 14px; border-radius: 12px; }
+header button { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; font-weight: 500; font-size: 15px; }
+header .round { width: 44px; padding: 0; justify-content: center; }
+header .round svg { width: 20px; height: 20px; }
 
 #floors { position: fixed; top: calc(env(safe-area-inset-top) + 64px); left: 0; right: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
   padding: 0 calc(env(safe-area-inset-right) + 10px) 12px calc(env(safe-area-inset-left) + 10px); pointer-events: none; }
-#floors button { pointer-events: auto; flex: none; min-height: 40px; padding: 0 14px; font-size: 14.5px; font-weight: 500; white-space: nowrap; background: var(--surface); box-shadow: var(--shadow); }
-#floors button[aria-pressed=true], #floors .out { background: var(--accent); color: var(--on-accent); }
+#floors button { pointer-events: auto; flex: none; min-height: 40px; padding: 0 14px; font-size: 14.5px; font-weight: 500; white-space: nowrap; }
+#floors button[aria-pressed=true], #floors .out { background: var(--accent); color: var(--on-accent); box-shadow: var(--shadow); }
 
 #bar { position: fixed; left: 50%; translate: -50% 0; bottom: calc(env(safe-area-inset-bottom) + 12px); width: min(calc(100% - 20px), 420px); display: grid; grid-template-columns: repeat(4, 1fr);
-  padding: 4px; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); }
+  padding: 4px; border-radius: 16px; }
 #bar button { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 6px 2px; font-size: 12.5px; font-weight: 500; }
 #bar svg { width: 22px; height: 22px; }
 #tip, #banner { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 84px); translate: -50% 0; width: max-content; max-width: calc(100% - 32px);
-  padding: 9px 14px; font-size: 14px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); }
+  padding: 9px 14px; font-size: 14px; border-radius: 12px; }
 #tip { text-align: center; color: var(--muted); pointer-events: none; }
 #banner { display: none; align-items: center; gap: 12px; padding-right: 6px; }
 #banner button { flex: none; min-height: 36px; padding: 0 12px; font-weight: 500; color: var(--accent); }
@@ -48,7 +54,7 @@ header button { display: flex; align-items: center; gap: 6px; min-height: 44px; 
 .seen #tip, .has-panel #tip, .has-banner #tip, .walk #tip, .has-panel #bar, .walk #bar { display: none; }
 
 #stick { position: fixed; left: calc(env(safe-area-inset-left) + 20px); bottom: calc(env(safe-area-inset-bottom) + 24px); width: 112px; height: 112px; display: none; place-items: center;
-  border-radius: 50%; background: color-mix(in oklch, var(--surface) 70%, transparent); box-shadow: var(--shadow); touch-action: none; }
+  border-radius: 50%; touch-action: none; }
 #knob { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); pointer-events: none; }
 .walk #stick { display: grid; }
 .walk.has-panel #stick, .walk.has-banner #stick { display: none; }
@@ -110,7 +116,26 @@ h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: -4px
 .report summary { cursor: pointer; padding: 10px 0; }
 .note { font-size: 14px; padding: 10px 12px; background: var(--tint); border-radius: 10px; }
 
-@media (hover: hover) { header button:hover, #bar button:hover, .tile:hover, .list > *:hover, .acts button:not([aria-pressed=true]):hover, .icon:hover { background: var(--well); } }
+/* Bildetekst: hvor du er og hvor stort det er, med lett, stor skrift. */
+#caption { position: fixed; top: calc(env(safe-area-inset-top) + 116px); left: calc(env(safe-area-inset-left) + 10px); max-width: min(300px, calc(100% - 20px));
+  display: grid; gap: 2px; padding: 12px 16px 13px; border-radius: 16px; pointer-events: none; }
+#caption small { font-size: 11.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#caption strong { font-size: 26px; font-weight: 400; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
+#caption span { font-size: 13.5px; color: var(--muted); line-height: 1.35; }
+.has-banner #caption { display: none; }
+@media (max-width: 759px) { .has-panel #caption { display: none; } #caption strong { font-size: 22px; } }
+
+/* Romnavn som svever i 3D-visningen */
+#labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.label { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 7px; min-height: 32px; padding: 0 12px; border-radius: 999px; pointer-events: auto;
+  font-size: 13px; font-weight: 500; white-space: nowrap; color: #fff; background: oklch(0.22 0.01 70 / .55); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px oklch(1 0 0 / .18), 0 4px 14px -6px oklch(0 0 0 / .5); transition: opacity .25s ease-out; }
+.label::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: oklch(0.86 0.09 75); }
+.label::before { content: ''; position: absolute; inset: -6px -2px; } /* større trykkflate */
+.label.off { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .label { transition: none; } }
+
+@media (hover: hover) { .label:hover { background: oklch(0.22 0.01 70 / .75); } header button:hover, #bar button:hover, .tile:hover, .list > *:hover, .acts button:not([aria-pressed=true]):hover, .icon:hover { background: var(--well); } }
 @media (min-width: 760px) {
   #panel { left: auto; top: 64px; right: 10px; bottom: 10px; width: 340px; max-height: none; border-radius: 16px; padding: 16px; }
   #floors { right: 360px; }
