@@ -4,7 +4,7 @@ Bilder av ett hus inn → redigerbar 3D-modell. Nettapp uten byggesteg (vanilla 
 ## Slik virker den
 1. **Bilder:** velg 5–30 bilder av ett hus, ute og inne. De krympes i nettleseren (lang side 1280 px), vises som en liste der enkeltbilder kan fjernes, og sendes til serveren. Fremdriften vises mens Claude tolker, og feil gis som norske meldinger.
 2. **Tolkning:** serveren spør Claude (`claude-opus-5-5`). Instruksen ber Claude arbeide i fast rekkefølge: ytre form og grunnflate fra utebildene, så etasjer og tak, så rominndeling fra innebildene, så dører og vinduer, til slutt møbler. Målene regnes ut fra kjente størrelser (dør 2,1 m, benk 0,9 m, etasjehøyde ca. 2,7 m), og det som ikke synes, anslås. Svaret er en kort befaring pluss ett hus i JSON-skjemaet. Før huset tegnes, kontrolleres det (`inspect()` i `js/house.js`): ytterveggene skal danne en lukket form, rommene skal ligge innenfor og ikke overlappe, dører og vinduer skal ligge innenfor veggen sin, og møblene skal stå inne i et rom. Småfeil rettes automatisk. Gjenstår alvorlige feil, får Claude én runde til å rette dem. Alt som ble rettet, alt som bør sjekkes og alt som er anslått, vises i en rapport etterpå.
-3. **3D:** Three.js tegner JSON-en. Hver vegg, hvert gulv, tak, vindu og møbel er et eget objekt. Taket følger grunnflaten: fløyer og lavere deler uten etasje over får sitt eget tak. Huset står under en himmel med dis mot horisonten. Månen øverst bytter til kveldslys: lav, varm sol, lys i hvert rom og vinduer som gløder. Kameraet glir mellom visningene, og et nytt hus vises med en kort dronetur inn mot det.
+3. **3D:** Three.js tegner JSON-en. Hver vegg, hvert gulv, tak, vindu og møbel er et eget objekt. Taket følger grunnflaten: fløyer og lavere deler uten etasje over får sitt eget tak. Huset står under en ekte himmel (HDRI fra Poly Haven, i `hdri/`) som gir både lyset, refleksjonene og bakgrunnen. Sola tas ut av himmelkartet og blir et eget lys med myke skygger, så forholdet mellom sol, himmel og taklamper er som i virkeligheten: rommene er lysest ved vinduene og mørkere innerst, og inne «åpner kameraet blenderen» to–tre trinn. Lamper og sterke høylys gløder. Faller bildefrekvensen under ca. 25 bilder/s, senkes oppløsningen automatisk. Månen øverst bytter til kveldslys: lav, oransje sol, lys i hvert rom og vinduer som gløder. Kameraet glir mellom visningene, og et nytt hus vises med en kort dronetur inn mot det.
 4. **Rediger:** trykk på et objekt for å endre farge, materiale og mål, flytte eller slette. «Legg til» gir vegg, dør, vindu, rom, etasje og møbler. Naboene følger med: flytter du en vegg, forlenges veggene som møter den, rommene langs den endrer størrelse, dører og vinduer blir stående i veggen sin, og taket følger ytterveggene. «Gå inn» flyr inn gjennom det største vinduet og blir stående inne i rommet. Romnavn svever i rommene du kan se. I etasjevisningen velger et trykk på navnet rommet, inne i huset går du dit. Bildeteksten øverst viser hvor du er, med anslåtte mål.
 5. **Lagre:** alle endringer oppdaterer JSON-en og lagres i nettleseren (IndexedDB), med angre. «Mer» eksporterer JSON og GLB, og importerer JSON.
 
@@ -25,6 +25,7 @@ Serveren har ingen innlogging. Legger du den åpent på nettet, kan alle som fin
 - `js/house.js`: JSON-skjemaet (øverst i filen), demohuset, `normalize()` og kontrollen `inspect()`. Serveren bruker samme fil (`js/package.json` gjør den til en ES-modul for Node).
 - `js/scene.js`: JSON → Three.js.
 - `js/app.js`: grensesnitt, redigering, lagring, eksport.
+- `hdri/`: himmelkartene for dag og kveld (CC0, se `hdri/KILDER.md`). Mobil laster 1k, PC 2k.
 - `server.js`: statiske filer og `POST /api/analyze`. Svaret strømmes som linjer med JSON (fremdrift, så huset eller en feil).
 
 Ved endringer i filene: øk `VERSION` i `service-worker.js`.
@@ -46,7 +47,7 @@ Bildene havner i `tools/bilder/<dato>_<tid>[-navn]/` (ikke i git). Kjør én gan
 | Fil | Vinkel |
 |---|---|
 | `hus-dag` | Hele huset utenfra, lyst tema |
-| `hus-kveld` | Samme vinkel, mørkt tema (appen har ikke eget kveldslys) |
+| `hus-kveld` | Samme vinkel, mørkt tema (kveldslys) |
 | `etasje-1` (og `etasje-2` …) | Etasjevisning ovenfra, uten tak |
 | `stue-vindu` | Inne i stua, mot det bredeste vinduet |
 | `stue-kjokken` | Inne i stua, mot døren til kjøkkenet |

@@ -5,6 +5,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { MATERIALS, bounds } from './house.js';
 
 const PATTERNS = { // 256 px = 1 m, lyse mønstre som fargen ganges inn i
@@ -35,10 +38,11 @@ function mat(material, color) {
   if (matCache[key]) return matCache[key];
   const m = MATERIALS[material] || MATERIALS.maling;
   if (material === 'glass') { // sterkere omgivelseskart, så himmelen speiles i rutene. Om kvelden gløder rutene av lyset inne.
-    const g = new THREE.MeshStandardMaterial({ color, roughness: .05, transparent: true, opacity: .4, envMapIntensity: 2.5, emissive: GLOW, emissiveIntensity: glow });
+    const g = new THREE.MeshStandardMaterial({ color, roughness: .05, transparent: true, opacity: .4, envMapIntensity: 1.5, emissive: GLOW, emissiveIntensity: glow });
     glassMats.push(g); return matCache[key] = g;
   }
-  return matCache[key] = new THREE.MeshStandardMaterial({ color, roughness: m.rough, metalness: m.metal || 0, map: texture(material) });
+  // Skyggen tegnes fra forsiden (mot sola), ikke baksiden: da lekker ikke sollyset inn under veggfoten og langs vinduskarmene.
+  return matCache[key] = new THREE.MeshStandardMaterial({ color, roughness: m.rough, metalness: m.metal || 0, map: texture(material), shadowSide: THREE.FrontSide });
 }
 const GLOW = new THREE.Color('#ffc98a'), glassMats = []; let glow = 0;
 function setGlow(v) { if (v === glow) return; glow = v; for (const g of glassMats) g.emissiveIntensity = v; }
@@ -53,7 +57,7 @@ function boxGeo(w, h, d) {
 function box(parent, w, h, d, x, y, z, material) {
   if (w <= 0 || h <= 0 || d <= 0) return;
   const m = new THREE.Mesh(boxGeo(w, h, d), material);
-  m.position.set(x, y + h / 2, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
+  m.position.set(x, y + h / 2, z); m.castShadow = !material.transparent; m.receiveShadow = true; parent.add(m); return m; // glass slipper sola gjennom
 }
 function tag(obj, id, kind, name) { obj.userData = { id, kind }; obj.name = name || kind; return obj; }
 
@@ -278,101 +282,181 @@ function buildRoof(house, upTo) {
   return group.children.length ? group : null;
 }
 
-// Omgivelseskart: himmel som blir lysere mot horisonten, og bakke under. Gir mykt lys fra alle kanter og noe å speile i glass og metall.
-function skyEnvironment(renderer) {
-  const geo = new THREE.SphereGeometry(10, 48, 24), pos = geo.attributes.position, col = [], c = new THREE.Color();
-  const zenith = new THREE.Color('#a9c1dc'), horizon = new THREE.Color('#f2f2ee'), ground = new THREE.Color('#7d776c'); // nesten nøytralt, så fargene på huset ikke forskyves
-  for (let i = 0; i < pos.count; i++) {
-    const h = pos.getY(i) / 10;
-    if (h >= 0) c.copy(horizon).lerp(zenith, Math.pow(h, .6)); else c.copy(horizon).lerp(ground, Math.min(1, -h * 6));
-    col.push(c.r, c.g, c.b);
-  }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const sky = new THREE.Scene(); sky.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-  const sun = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff2d8').multiplyScalar(6) }));
-  sun.position.set(-9, 16, 7).setLength(9); sky.add(sun);
-  const pmrem = new THREE.PMREMGenerator(renderer), env = pmrem.fromScene(sky, .02).texture;
-  pmrem.dispose(); geo.dispose();
-  return env;
-}
-// Three.js' filmiske ACES-kurve. Brukes baklengs på bakgrunnen, så den får akkurat den fargen vi ber om etter tonemappingen.
-const IN = [.59719, .076, .0284, .35458, .90834, .13383, .04823, .01566, .83777], OUT = [1.60475, -.10208, -.00327, -.53108, 1.10813, -.07276, -.07367, -.00605, 1.07602];
-const mul = (m, [r, g, b]) => [m[0] * r + m[3] * g + m[6] * b, m[1] * r + m[4] * g + m[7] * b, m[2] * r + m[5] * g + m[8] * b];
-const fit = v => (v * (v + .0245786) - .000090537) / (v * (.983729 * v + .432951) + .238081);
-const aces = (c, e) => mul(OUT, mul(IN, c.map(v => v * e / .6)).map(fit)).map(v => Math.min(1, Math.max(0, v)));
-function untone(hex, exposure) {
-  const t = new THREE.Color(hex).toArray(); let x = [...t];
-  for (let i = 0; i < 60; i++) { const y = aces(x, exposure); x = x.map((v, k) => Math.max(0, v + (t[k] - y[k]) * 1.5)); }
-  return new THREE.Color().fromArray(x);
-}
 // Kontaktskygger. Glass tas ikke med (det skal ikke få skygge selv), og skyggen regnes ut i omtrent én prikk per CSS-piksel.
 class ContactShadows extends GTAOPass {
   scale = 1;
   overrideVisibility() { super.overrideVisibility(); this.scene.traverse(o => { if (o.material?.transparent || o.userData.noAO) o.visible = false; }); }
   setSize(w, h) { super.setSize(Math.max(1, Math.round(w * this.scale)), Math.max(1, Math.round(h * this.scale))); }
 }
+// Tonemapping og fargerom, pluss hvitbalanse (fargen ganges med whiteBalance først), så den ikke koster et eget steg.
+class Output extends OutputPass {
+  constructor() {
+    super();
+    this.uniforms.whiteBalance = { value: new THREE.Vector3(1, 1, 1) };
+    this.material.fragmentShader = this.material.fragmentShader.replace('uniform sampler2D tDiffuse;', 'uniform sampler2D tDiffuse;\nuniform vec3 whiteBalance;')
+      .replace('gl_FragColor = texture2D( tDiffuse, vUv );', 'gl_FragColor = texture2D( tDiffuse, vUv ); gl_FragColor.rgb *= whiteBalance;');
+  }
+}
+// Glød rundt lamper og sterke høylys, regnet ut i lavere oppløsning (scale) så den koster lite.
+class Glow extends UnrealBloomPass {
+  scale = 1;
+  setSize(w, h) { super.setSize(Math.max(1, Math.round(w * this.scale)), Math.max(1, Math.round(h * this.scale))); }
+}
 
-
-// Lysstemninger. Dag: høy sol og lys himmel. Kveld: lav, varm sol, mørkeblå himmel og lys i rommene (den blå timen).
+// Lys i fysiske enheter: 1 = 1000 lux for lys som treffer en flate, 1000 cd/m² for flater som lyser. Himmelkartet skaleres så
+// det gir lux-verdien under, og sol, himmel og lamper får da de samme styrkeforholdene som i virkeligheten. exposure er
+// «kamerainnstillingen» utenfor og inne: inne åpnes blenderen to–tre trinn, som et kamera gjør, så vinduene blir lyse.
+// balance = hvor mye kameraet hvitbalanserer mot himmellyset (0–1), utenfor og inne. Dagslys inne er ellers blåstikk; kveldslyset
+// får beholde den varme fargen fra lampene.
+// Himmelkartene er fra Poly Haven (CC0), lagret i hdri/. Mobil får 1k, PC 2k. reserve = enkel himmel til kartet er lastet.
 const MOODS = {
-  day: { top: '#7ea4cd', mid: '#c4d6e6', horizon: '#eef1ec', ground: '#b5c4a2', sun: ['#fff4e0', 2], sunAt: [-9, 16, 7], hemi: ['#ffffff', '#8a8578', 1], env: .5, lamps: 0, exposure: 1 },
-  evening: { top: '#1a3160', mid: '#6d90c2', horizon: '#efbb92', ground: '#5a6656', sun: ['#ffa468', 1], sunAt: [-16, 4.5, 10], hemi: ['#86a0d4', '#3a3632', 2.6], env: .35, lamps: 1, exposure: 1.05 },
+  day: { hdri: 'kloofendal_48d_partly_cloudy_puresky', lux: 60, sunAt: [-9, 7], ground: '#5f6b48', exposure: [.075, 1.1], balance: [0, .65], lamps: 0, glow: 0,
+    reserve: { top: '#6f97c4', mid: '#b8cde0', horizon: '#e8ece8', ground: '#5f6a52', el: 48, sun: 2.2 } },
+  evening: { hdri: 'qwantani_sunset_puresky', lux: .15, sunAt: [-16, 10], ground: '#5d6650', exposure: [8, 14], balance: [0, 0], lamps: 1, glow: .15,
+    reserve: { top: '#1f3a6e', mid: '#6d90c2', horizon: '#efbb92', ground: '#3d4538', el: 6, sun: 1.4 } },
 };
-// Himmel som følger kameraet: lys mot horisonten, mørkere opp mot toppen. Bakken tones inn i horisonten med dis.
-function skyDome() {
-  const m = new THREE.ShaderMaterial({
-    uniforms: { top: { value: new THREE.Color() }, mid: { value: new THREE.Color() }, horizon: { value: new THREE.Color() } },
-    vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); gl_Position.z = gl_Position.w; }',
-    fragmentShader: `uniform vec3 top, mid, horizon; varying vec3 vDir;
-      void main() {
-        float h = normalize(vDir).y;
-        vec3 c = h < .18 ? mix(horizon, mid, smoothstep(-.02, .18, h)) : mix(mid, top, pow((h - .18) / .82, .8));
-        gl_FragColor = vec4(c, 1.);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`,
-    side: THREE.BackSide, depthWrite: false, fog: false,
-  });
-  const s = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), m);
-  s.frustumCulled = false; s.renderOrder = -1; s.userData.noAO = true; return s;
+const LUMENS = 150, INDOOR = .04, GLASS = .85; // lumen per m² gulv fra taklampene, andel av himmellyset som når inn som gjenskinn, glassets gjennomslipp
+const LUM = [.2126, .7152, .0722], BINS = [64, 32];
+const COARSE = matchMedia('(pointer: coarse)').matches;
+const SKY_RES = COARSE || Math.max(screen.width, screen.height) < 1100 ? '1k' : '2k';
+const linear = hex => new THREE.Color(hex); // Color tar sRGB-hex og lagrer lineære verdier
+
+// Leser et himmelkart (RGBA halvflyttall, rad 0 = senit): tar sola ut av kartet så den kan bli et retningslys med skygger,
+// roterer kartet så sola står i retningen az (radianer, som atan2(z, x)), og regner ut lysstyrker fra resten.
+// Det som tas ut av kartet, blir solas styrke. Slik telles ikke sollyset to ganger, og forholdet mellom sol og himmel blir
+// det samme som i bildet.
+function readSky(tex, mood) {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  const { data, width: W, height: H } = tex.image, half = THREE.DataUtils.fromHalfFloat, toHalf = THREE.DataUtils.toHalfFloat;
+  const elev = r => (.5 - (r + .5) / H) * Math.PI, cell = (Math.PI / H) * (2 * Math.PI / W);
+  const lum = new Float32Array(W * H), sample = []; let max = 0;
+  for (let i = 0, n = W * H; i < n; i++) {
+    const v = LUM[0] * half(data[i * 4]) + LUM[1] * half(data[i * 4 + 1]) + LUM[2] * half(data[i * 4 + 2]);
+    lum[i] = v; if (v > max) max = v; if (i < n / 2 && i % 7 === 0) sample.push(v);
+  }
+  sample.sort((a, b) => a - b);
+  const limit = Math.min(50 * sample[sample.length >> 1], .25 * max), sun = [0, 0, 0], dir = new THREE.Vector3();
+  for (let i = 0; i < W * H; i++) {
+    if (lum[i] <= limit) continue;
+    const r = Math.floor(i / W), c = i % W, el = elev(r), phi = ((c + .5) / W - .5) * 2 * Math.PI, w = Math.cos(el) * cell, k = limit / lum[i];
+    for (let ch = 0; ch < 3; ch++) { const v = half(data[i * 4 + ch]); sun[ch] += v * (1 - k) * w; data[i * 4 + ch] = toHalf(v * k); }
+    dir.x += Math.cos(el) * Math.cos(phi) * lum[i] * w; dir.y += Math.sin(el) * lum[i] * w; dir.z += Math.cos(el) * Math.sin(phi) * lum[i] * w;
+  }
+  dir.normalize();
+  // Roter: flytt kolonnene så sola havner i retningen az. Kartet slås opp med u = atan2(z, x) / 2π + 0,5.
+  const az = Math.atan2(mood.sunAt[1], mood.sunAt[0]), shift = ((Math.round((az - Math.atan2(dir.z, dir.x)) / (2 * Math.PI) * W) % W) + W) % W;
+  if (shift) {
+    const row = new Uint16Array(W * 4);
+    for (let r = 0; r < H; r++) { const o = r * W * 4; row.set(data.subarray(o, o + W * 4)); data.set(row.subarray(0, (W - shift) * 4), o + shift * 4); data.set(row.subarray((W - shift) * 4), o); }
+    dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), -shift / W * 2 * Math.PI);
+  }
+  // Lyskart: en mindre kopi (512 × 256) som blir omgivelseslyset. Under horisonten står bakken (fargen ganger lyset den får).
+  // Bakgrunnen får i stedet horisontfargen under horisonten, så den glir sømløst over i disen over bakken.
+  const EW = Math.min(512, W), EH = EW / 2, env = new Float32Array(EW * EH * 4), n = new Float32Array(EW * EH), step = Math.max(1, W / EW >> 1);
+  for (let r = 0; r < H; r += step) for (let c = 0; c < W; c += step) {
+    const e = Math.floor(r / H * EH) * EW + Math.floor(c / W * EW), i = (r * W + c) * 4;
+    env[e * 4] += half(data[i]); env[e * 4 + 1] += half(data[i + 1]); env[e * 4 + 2] += half(data[i + 2]); n[e]++;
+  }
+  for (let e = 0; e < EW * EH; e++) for (let ch = 0; ch < 3; ch++) env[e * 4 + ch] /= n[e] || 1;
+  const cellE = r => Math.cos((.5 - (r + .5) / EH) * Math.PI) * (Math.PI / EH) * (2 * Math.PI / EW);
+  const sunLum = LUM[0] * sun[0] + LUM[1] * sun[1] + LUM[2] * sun[2];
+  const skyRGB = [0, 0, 0];
+  for (let r = 0; r < EH / 2; r++) for (let c = 0; c < EW; c++) for (let ch = 0; ch < 3; ch++) skyRGB[ch] += env[(r * EW + c) * 4 + ch] * Math.sin((.5 - (r + .5) / EH) * Math.PI) * cellE(r);
+  const sky = LUM[0] * skyRGB[0] + LUM[1] * skyRGB[1] + LUM[2] * skyRGB[2];
+  const total = sky + sunLum * Math.max(0, dir.y), scale = mood.lux / total; // lux på bakken fra himmel og sol, før skalering
+  // Bakken i lyskartet er nøytral (gress, grus og vegger rundt i snitt), så den ikke farger tak og vegger grønne.
+  const ground = [.2, .19, .17].map(a => a * total / Math.PI);
+  const hz = [0, 0, 0], rows = Math.max(1, Math.round(EH / 90)); // snittet av de nederste 2° over horisonten
+  for (let r = EH / 2 - rows; r < EH / 2; r++) for (let c = 0; c < EW; c++) for (let ch = 0; ch < 3; ch++) hz[ch] += env[(r * EW + c) * 4 + ch] / (rows * EW);
+  for (let r = EH / 2; r < EH; r++) for (let c = 0; c < EW; c++) env.set([...ground, 1], (r * EW + c) * 4);
+  const envTex = new THREE.DataTexture(Uint16Array.from(env, v => toHalf(v)), EW, EH, THREE.RGBAFormat, THREE.HalfFloatType);
+  Object.assign(envTex, { flipY: true, mapping: THREE.EquirectangularReflectionMapping, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, generateMipmaps: false, needsUpdate: true });
+  const hzHalf = hz.map(v => toHalf(v)), fade = Math.max(1, Math.round(H / 120)); // 1,5° overgang
+  for (let r = H / 2; r < H; r++) {
+    const k = Math.min(1, (r - H / 2 + 1) / fade);
+    for (let c = 0; c < W; c++) { const i = (r * W + c) * 4; for (let ch = 0; ch < 3; ch++) data[i + ch] = k >= 1 ? hzHalf[ch] : toHalf(half(data[i + ch]) * (1 - k) + hz[ch] * k); }
+  }
+  tex.needsUpdate = true;
+  // Grovt rutenett (64 × 32) til lyset som kommer inn gjennom vinduene.
+  const [BW, BH] = BINS, bins = new Float32Array(BW * BH * 3), fx = EW / BW;
+  for (let r = 0; r < EH; r++) for (let c = 0; c < EW; c++) for (let ch = 0; ch < 3; ch++) bins[(Math.floor(r / fx) * BW + Math.floor(c / fx)) * 3 + ch] += env[(r * EW + c) * 4 + ch] / (fx * fx);
+  const binDir = b => { const el = (.5 - (Math.floor(b / BW) + .5) / BH) * Math.PI, phi = ((b % BW + .5) / BW - .5) * 2 * Math.PI; return [Math.cos(el) * Math.cos(phi), Math.sin(el), Math.cos(el) * Math.sin(phi), Math.cos(el) * (Math.PI / BH) * (2 * Math.PI / BW)]; };
+  const horizon = new THREE.Color(...hz);
+  const m = Math.max(...sun);
+  return {
+    tex, envTex, scale, dir, sunColor: new THREE.Color(sun[0] / m, sun[1] / m, sun[2] / m), sunI: m * scale, horizon: horizon.multiplyScalar(scale),
+    ground: new THREE.Color(...ground).multiplyScalar(scale), up: new THREE.Color().setScalar(sky * scale), skyTint: new THREE.Color(...skyRGB.map(v => v / sky)),
+    // Snittlyset (cd/m²-enheter) fra himmel og bakke sett fra et vindu som vender i retningen n = [x, z].
+    window([nx, nz]) {
+      const c = [0, 0, 0]; let wsum = 0;
+      for (let b = 0; b < BW * BH; b++) {
+        const [x, y, z, w] = binDir(b), k = Math.max(0, x * nx + z * nz) * w; if (!k) continue;
+        for (let ch = 0; ch < 3; ch++) c[ch] += bins[b * 3 + ch] * k;
+        wsum += k;
+      }
+      return new THREE.Color(...c.map(v => v / wsum * scale));
+    },
+  };
+}
+// Enkel himmel (fargeovergang og en sol) mens det ekte himmelkartet lastes, eller hvis det ikke kan lastes.
+function reserveSky(mood) {
+  const W = 128, H = 64, data = new Uint16Array(W * H * 4), f = mood.reserve, toHalf = THREE.DataUtils.toHalfFloat;
+  const top = linear(f.top), mid = linear(f.mid), horizon = linear(f.horizon), ground = linear(f.ground), c = new THREE.Color();
+  for (let r = 0; r < H; r++) {
+    const h = Math.sin((.5 - (r + .5) / H) * Math.PI);
+    if (h >= .18) c.copy(mid).lerp(top, Math.pow((h - .18) / .82, .8)); else if (h >= 0) c.copy(horizon).lerp(mid, h / .18); else c.copy(horizon).lerp(ground, Math.min(1, -h * 6));
+    for (let x = 0; x < W; x++) data.set([toHalf(c.r), toHalf(c.g), toHalf(c.b), toHalf(1)], (r * W + x) * 4);
+  }
+  // Sola: 2×2 punkter, så sterk at den gir f.sun ganger lyset fra himmelen.
+  const r0 = Math.round((.5 - f.el / 180) * H) - 1, w = Math.cos(f.el * Math.PI / 180) * (Math.PI / H) * (2 * Math.PI / W) * 4, sunL = f.sun * Math.PI * .5 / w;
+  for (const [dr, dc] of [[0, 0], [0, 1], [1, 0], [1, 1]]) data.set([toHalf(sunL), toHalf(sunL * .95), toHalf(sunL * .85), toHalf(1)], ((r0 + dr) * W + W / 2 + dc) * 4);
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
+  Object.assign(tex, { flipY: true, magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, generateMipmaps: false });
+  return tex;
 }
 const fwd = yaw => new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
 const ease = k => k < .5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
-const MAX_LAMPS = matchMedia('(pointer: coarse)').matches ? 6 : 10;
+const MAX_LAMPS = COARSE ? 6 : 10, MAX_WINDOWS = COARSE ? 2 : 6; // vinduslysene er det dyreste inne (ca. 7 % hver på mobil)
 
 export function createView(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1; // filmisk: myke høylys i stedet for utbrent hvitt
-  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, .05, 300);
-  // Omgivelseskartet og kontaktskyggene trenger flyttall-bilder. Eldre mobiler uten dem får det enkle himmellyset fra før.
+  // Myke skygger (VSM, uskarphet rundt kanten). Skyggekartet tegnes bare på nytt når huset eller sola endres, ikke når kameraet flytter seg.
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.VSMShadowMap; renderer.shadowMap.autoUpdate = false;
+  // Khronos PBR Neutral: gjengir fargene fra JSON-en mest likt på demohuset (AgX bleker dem, ACES gjør dem mørkere og forskyver dem).
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, .05, 400);
+  // Himmelkartet, kontaktskyggene og gløden trenger flyttall-bilder. Eldre mobiler uten dem får himmellys fra en halvkule.
   const hdr = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
-  if (hdr) { scene.environment = skyEnvironment(renderer); scene.environmentIntensity = .5; }
+  const pmrem = hdr ? new THREE.PMREMGenerator(renderer) : null;
   const root = new THREE.Group(); root.name = 'Hus'; scene.add(root);
   const lamps = new THREE.Group(); lamps.name = 'Taklamper'; scene.add(lamps); // utenfor root: tas ikke med i valg eller GLB-eksport
-  const sky = skyDome(); scene.add(sky);
-  scene.fog = new THREE.Fog('#ffffff', 45, 130);
-  const fill = new THREE.AmbientLight('#fff1e0', 0), hemi = new THREE.HemisphereLight('#ffffff', '#8a8578', hdr ? .3 : 1.5);
-  scene.add(hemi, fill);
+  scene.fog = new THREE.Fog('#ffffff', 40, 200);
+  const hemi = new THREE.HemisphereLight('#ffffff', '#8a8578', hdr ? 0 : 1);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff4e0', 2);
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0005; sun.shadow.normalBias = .03;
-  Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 90 });
+  sun.castShadow = true; sun.shadow.mapSize.setScalar(COARSE ? 1024 : 2048); sun.shadow.bias = -.0003; sun.shadow.normalBias = .02; // mobil: halv oppløsning (VSM-kartet tar 64 MB i 2048)
+  sun.shadow.radius = COARSE ? 2 : 3; sun.shadow.blurSamples = COARSE ? 8 : 12;
   scene.add(sun, sun.target);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(160, 64), new THREE.MeshStandardMaterial({ roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.y = -.16; ground.receiveShadow = true; scene.add(ground);
-  // Etterbehandling: scenen (med kantutjevning) → kontaktskygger → tonemapping og fargerom.
-  // Uten flyttall-bilder tegnes scenen rett ut, fortsatt med tonemapping, men uten kontaktskygger.
-  let composer = null, ao = null;
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(220, 64), new THREE.MeshStandardMaterial({ roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -.16; ground.receiveShadow = true; ground.userData.noAO = true; scene.add(ground);
+  // Vinduslys: himmellyset som faller inn gjennom vinduene når du er inne. Gir lyse rom ved vinduet og mørkere innerst.
+  RectAreaLightUniformsLib.init();
+  const windows = new THREE.Group(); windows.name = 'Vinduslys';
+  for (let i = 0; i < MAX_WINDOWS; i++) windows.add(new THREE.RectAreaLight('#ffffff', 0, 1, 1));
+  // Etterbehandling: scenen (med kantutjevning) → kontaktskygger → glød → tonemapping og fargerom.
+  // Uten flyttall-bilder tegnes scenen rett ut, fortsatt med tonemapping, men uten kontaktskygger og glød.
+  let composer = null, ao = null, bloom = null, output = null;
   if (hdr) {
     composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
-    ao = new ContactShadows(scene, camera, 1, 1, undefined, { radius: .4, distanceExponent: 1.5, thickness: .3, distanceFallOff: .5, scale: 1.6, samples: 16 }, { radius: 4, radiusExponent: 1, samples: 16 });
-    composer.addPass(new RenderPass(scene, camera)); composer.addPass(ao); composer.addPass(new OutputPass());
+    ao = new ContactShadows(scene, camera, 1, 1, undefined, { radius: .4, distanceExponent: 1.5, thickness: .3, distanceFallOff: .5, scale: 1.6, samples: COARSE ? 12 : 16 }, { radius: 4, radiusExponent: 1, samples: COARSE ? 8 : 16 });
+    bloom = new Glow(new THREE.Vector2(1, 1), .15, .4, 1);
+    composer.addPass(new RenderPass(scene, camera)); composer.addPass(ao); composer.addPass(bloom); composer.addPass(output = new Output());
   }
   const controls = new OrbitControls(camera, canvas);
   controls.maxPolarAngle = Math.PI / 2 - .02; controls.minDistance = 1; controls.maxDistance = 90;
+  let maxPr = 2, slow = 0, drawn = 0, drewLast = false;
   let dirty = true, byId = {}, lit = [], inset = [0, 0], last = 0, mode = 'orbit', flight = null, mood = MOODS.day;
   let shown = { house: null, floor: null }, focusY = null, occluders = [];
-  const center = new THREE.Vector3();
   const walk = { yaw: 0, pitch: 0, move: [0, 0], saved: null };
   const invalidate = () => { dirty = true; };
   controls.addEventListener('change', invalidate);
@@ -380,10 +464,19 @@ export function createView(canvas) {
 
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
-    const pr = Math.min(devicePixelRatio, 2); renderer.setPixelRatio(pr); renderer.setSize(w, h, false);
-    if (composer) { ao.scale = 1 / pr; composer.setPixelRatio(pr); composer.setSize(w, h); }
+    const pr = Math.min(devicePixelRatio, maxPr); renderer.setPixelRatio(pr); renderer.setSize(w, h, false);
+    if (composer) { ao.scale = 1 / pr; bloom.scale = (COARSE ? .5 : 1) / pr; composer.setPixelRatio(pr); composer.setSize(w, h); }
     camera.aspect = w / h; if (mode === 'walk' && !flight) camera.fov = walkFov();
     camera.setViewOffset(w, h, inset[0] / 2, inset[1] / 2, w, h); invalidate();
+  }
+  // Bildefrekvens: tegnes det sammenhengende (kameraet flyr, du drar eller går) og bildene kommer sjeldnere enn hvert 40. ms
+  // (under 25 bilder/s), senkes oppløsningen et trinn, ned til én prikk per CSS-piksel. Ikke i automatiske kjøringer
+  // (tools/bilder.js), så skjermbildene der alltid har samme oppløsning.
+  function frameRate(t, continuous) {
+    const gap = t - drawn; drawn = t;
+    if (!continuous || maxPr <= 1 || navigator.webdriver) return;
+    slow = gap > 40 ? slow + 1 : Math.max(0, slow - 1);
+    if (slow > 20) { maxPr = Math.max(1, maxPr - .25); slow = 0; resize(); }
   }
   // Inne: vidvinkel. På en stående mobilskjerm enda videre, ellers ser du bare et utsnitt av rommet.
   const walkFov = () => camera.aspect >= 1 ? 75 : Math.min(95, 2 * Math.atan(Math.tan(37.5 * Math.PI / 180) / camera.aspect ** .6) * 180 / Math.PI);
@@ -428,16 +521,21 @@ export function createView(canvas) {
       }
       camera.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ');
     }
+    const rendered = dirty;
     if (dirty) {
-      dirty = false; sky.position.copy(camera.position);
+      if (mode === 'walk') updateWindows();
+      dirty = false; frameRate(t, drewLast);
       composer ? composer.render(dt) : renderer.render(scene, camera);
       api.onFrame?.();
     }
+    drewLast = rendered;
   });
 
-  // Taklamper: et varmt lys midt i taket i hvert rom. Om kvelden overalt, inne i huset også på dagtid.
+  // Taklamper: en nedlyslampe midt i taket i hvert rom, om kvelden overalt, inne i huset også på dagtid. Lysmengden følger
+  // gulvarealet (LUMENS per m², som vanlig boligbelysning), så lampene er nesten usynlige ved siden av dagslys og tydelige om kvelden.
   // Antallet er begrenset (hvert lys koster på mobil), og rommene nærmest etasjen du står i får lys først.
-  const discGeo = new THREE.CylinderGeometry(.17, .17, .012, 24), discMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff0d8').multiplyScalar(4) });
+  const CONE = 1.15, discGeo = new THREE.CylinderGeometry(.17, .17, .012, 24);
+  const discMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff0d8').multiplyScalar(12) }); // ca. 12 000 cd/m², som en opal lampeskjerm
   function updateLamps() {
     lamps.clear();
     const { house, floor } = shown;
@@ -450,28 +548,79 @@ export function createView(canvas) {
     const near = a => focusY === null ? 0 : Math.abs(a.y + 1.6 - focusY);
     all.sort((a, b) => near(a) - near(b) || b.r.w * b.r.d - a.r.w * a.r.d);
     for (const { r, y, H, ceiling, top } of all.slice(0, MAX_LAMPS)) {
-      const A = r.w * r.d, cx = r.x + r.w / 2, cz = r.z + r.d / 2, ceil = y + H - (top ? .1 : .15);
-      const l = new THREE.PointLight('#ffd3a3', (mood.lamps ? 4.5 : 2.2) * Math.min(2.2, Math.max(.6, A / 12)), Math.max(r.w, r.d) * .9 + 1.5, 2);
-      l.position.set(cx, ceil - .7, cz); lamps.add(l); // litt under taket, så taket rundt lampen ikke brenner ut
+      const lm = LUMENS * Math.min(40, Math.max(4, r.w * r.d)), cx = r.x + r.w / 2, cz = r.z + r.d / 2, ceil = y + H - (top ? .1 : .15);
+      const l = new THREE.SpotLight('#ffd3a3', lm / 1000 / (2 * Math.PI * (1 - Math.cos(CONE))), Math.max(r.w, r.d) * 1.5 + 2, CONE, .8, 2);
+      l.position.set(cx, ceil - .03, cz); l.target.position.set(cx, ceil - 3, cz); lamps.add(l, l.target);
       if (ceiling) { const d = new THREE.Mesh(discGeo, discMat); d.position.set(cx, ceil - .006, cz); lamps.add(d); }
     }
   }
-  function placeSun() { sun.target.position.copy(center); sun.position.copy(center).add(new THREE.Vector3(...mood.sunAt)); }
-  function setMood(name) {
-    mood = MOODS[name] || MOODS.day;
-    const tone = hex => untone(hex, mood.exposure), u = sky.material.uniforms;
-    renderer.toneMappingExposure = mood.exposure;
-    u.top.value.copy(tone(mood.top)); u.mid.value.copy(tone(mood.mid)); u.horizon.value.copy(tone(mood.horizon)); scene.fog.color.copy(u.horizon.value);
-    ground.material.color.set(mood.ground);
-    sun.color.set(mood.sun[0]); sun.intensity = mood.sun[1];
-    hemi.color.set(mood.hemi[0]); hemi.groundColor.set(mood.hemi[1]); hemi.intensity = (hdr ? .3 : 1.5) * mood.hemi[2];
-    if (hdr) scene.environmentIntensity = mood.env;
-    placeSun(); lights(); invalidate();
+  // Vinduslysene står i de nærmeste vinduene i etasjen du er i, og lyser med himmelen og bakken utenfor det vinduet.
+  let wins = [];
+  const winAt = new THREE.Vector3(Infinity, 0, 0);
+  function updateWindows(force) {
+    if (mode !== 'walk' || !hdr || !sky) { if (windows.parent) { scene.remove(windows); invalidate(); } return; }
+    if (!windows.parent) { scene.add(windows); force = true; }
+    const p = camera.position; if (!force && p.distanceTo(winAt) < .75) return;
+    winAt.copy(p);
+    const near = wins.filter(w => Math.abs(w.y - p.y) < 2.5).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+    windows.children.forEach((l, i) => {
+      const w = near[i]; if (!w) { l.intensity = 0; return; }
+      if (w.skyFor !== sky) { w.sky = sky.window([-w.n[0], -w.n[1]]).multiplyScalar(GLASS); w.skyFor = sky; }
+      const m = Math.max(w.sky.r, w.sky.g, w.sky.b, 1e-6);
+      l.color.setRGB(w.sky.r / m, w.sky.g / m, w.sky.b / m); l.intensity = m; l.width = w.w; l.height = w.h;
+      l.position.set(w.x, w.y, w.z); l.lookAt(w.x + w.n[0], w.y, w.z + w.n[1]);
+    });
+    invalidate();
   }
-  // Lys som avhenger av både stemning og om du er inne: lamper, glødende ruter (bare sett utenfra) og fyllys inne.
+  // Skyggekameraet følger huset og skyggen det kaster bortover bakken, så skyggekartet brukes der det trengs og blir skarpt.
+  function fitShadow() {
+    const d = sky ? sky.dir : new THREE.Vector3(0, 1, 0), b = new THREE.Box3().setFromObject(root);
+    if (b.isEmpty()) b.set(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5));
+    const c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2, gy = ground.position.y;
+    sun.target.position.copy(c); sun.position.copy(c).addScaledVector(d, r + 20); sun.updateMatrixWorld(); sun.target.updateMatrixWorld(); sun.shadow.updateMatrices(sun);
+    const cam = sun.shadow.camera, lo = new THREE.Vector3(Infinity, Infinity, Infinity), hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    for (let i = 0; i < 8; i++) {
+      const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+      const q = p.clone().addScaledVector(d, -Math.min(70, (p.y - gy) / Math.max(.02, d.y))); // der skyggen av hjørnet treffer bakken
+      for (const v of [p, q]) { v.applyMatrix4(cam.matrixWorldInverse); lo.min(v); hi.max(v); }
+    }
+    Object.assign(cam, { left: lo.x - .5, right: hi.x + .5, bottom: lo.y - .5, top: hi.y + .5, near: Math.max(.1, -hi.z - 1), far: -lo.z + 1 });
+    cam.updateProjectionMatrix(); renderer.shadowMap.needsUpdate = true; invalidate();
+  }
+  // Himmelkartet: lys, refleksjoner og bakgrunn. Det ekte kartet lastes første gang en stemning brukes, og caches.
+  const skies = {}, loading = {}, loader = new RGBELoader().setDataType(THREE.HalfFloatType);
+  let sky = null;
+  function applySky(info) {
+    sky = info;
+    if (pmrem) { info.env ??= pmrem.fromEquirectangular(info.envTex).texture; scene.environment = info.env; scene.background = info.tex; scene.backgroundIntensity = info.scale; }
+    else scene.background = info.horizon.clone();
+    scene.fog.color.copy(info.horizon);
+    sun.color.copy(info.sunColor); sun.intensity = info.sunI;
+    hemi.color.copy(info.up); hemi.groundColor.copy(info.ground).multiplyScalar(Math.PI);
+    canvas.dataset.sky = info.real ? 'hdri' : 'reserve';
+    fitShadow(); lights();
+  }
+  function setMood(name) {
+    const m = mood = MOODS[name] || MOODS.day;
+    ground.material.color.set(m.ground);
+    if (skies[m.hdri]) return applySky(skies[m.hdri]);
+    applySky(skies['reserve:' + m.hdri] ??= readSky(reserveSky(m), m));
+    loading[m.hdri] ??= loader.loadAsync(`hdri/${m.hdri}_${SKY_RES}.hdr`).then(tex => {
+      skies[m.hdri] = Object.assign(readSky(tex, m), { real: true });
+      if (mood === m) applySky(skies[m.hdri]);
+    }, e => { delete loading[m.hdri]; canvas.dataset.skyError = e.message || 'feil'; console.warn('Himmelkartet kunne ikke lastes, bruker enkel himmel.', e); });
+  }
+  // Lys som avhenger av både stemning og om du er inne: kamerainnstilling, lamper, vinduslys, gjenskinn inne og glødende ruter.
   function lights() {
-    updateLamps(); setGlow(mood.lamps && mode === 'orbit' ? .9 : 0);
-    fill.intensity = mode === 'walk' ? (mood.lamps ? .25 : .55) : 0; invalidate();
+    const inside = mode === 'walk', e = mood.exposure[inside ? 1 : 0];
+    renderer.toneMappingExposure = e;
+    if (output && sky) { // hvitbalanse: del på himmelfargen, i den grad balance sier, uten å endre lysstyrken
+      const k = mood.balance[inside ? 1 : 0], t = sky.skyTint, g = [t.r, t.g, t.b].map(v => Math.pow(1 / v, k)), l = LUM[0] * g[0] * t.r + LUM[1] * g[1] * t.g + LUM[2] * g[2] * t.b;
+      output.uniforms.whiteBalance.value.set(...g.map(v => v / l));
+    }
+    if (bloom) { bloom.threshold = 3 / e; bloom.highPassUniforms.smoothWidth.value = 2 / e; } // bare det som er mye lysere enn hvitt, gløder
+    if (sky) { scene.environmentIntensity = sky.scale * (inside ? INDOOR : 1); hemi.intensity = hdr ? 0 : inside ? INDOOR : 1; }
+    updateLamps(); updateWindows(true); setGlow(mood.lamps && !inside ? mood.glow : 0); invalidate();
   }
 
   // floor = null viser hele huset med tak. Et tall viser etasjene til og med den, uten tak, så du ser ned i rommene.
@@ -499,7 +648,23 @@ export function createView(canvas) {
     });
     // Kontaktskyggene regnes bare ut rundt huset, ikke ut over hele bakken.
     if (ao) { const b = new THREE.Box3().setFromObject(root); ao.setSceneClipBox(b.isEmpty() ? null : b.expandByScalar(1)); }
-    shown = { house, floor }; updateLamps(); invalidate();
+    // Vinduene i yttervegger (rom på bare én side), til vinduslysene. n = retningen inn i rommet.
+    wins = []; y = 0;
+    house.floors.forEach((f, i) => {
+      const inRoom = (x, z) => f.rooms.some(r => x > r.x && x < r.x + r.w && z > r.z && z < r.z + r.d);
+      if (floor === null || i <= floor) for (const w of f.walls) {
+        const L = Math.hypot(w.x2 - w.x1, w.z2 - w.z1) || 1, ux = (w.x2 - w.x1) / L, uz = (w.z2 - w.z1) / L;
+        for (const o of w.openings || []) {
+          if (o.type !== 'window') continue;
+          const px = w.x1 + ux * o.pos, pz = w.z1 + uz * o.pos, a = inRoom(px - uz * .4, pz + ux * .4), b = inRoom(px + uz * .4, pz - ux * .4);
+          if (a === b) continue;
+          const n = a ? [-uz, ux] : [uz, -ux], sill = Math.min(o.sill, f.height - .3), top = Math.min(f.height, sill + o.height), k = .03; // rett innenfor glasset
+          wins.push({ x: px + n[0] * k, y: y + (sill + top) / 2, z: pz + n[1] * k, w: Math.max(.1, o.width - .12), h: Math.max(.1, top - sill - .12), n });
+        }
+      }
+      y += f.height;
+    });
+    shown = { house, floor }; fitShadow(); updateLamps(); updateWindows(true); invalidate();
   }
   function select(id) {
     const o = byId[id]; if (!o) return;
@@ -517,7 +682,6 @@ export function createView(canvas) {
     const c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
     const dist = r / Math.sin(camera.fov * Math.PI / 360) * (camera.aspect < 1 ? 1.15 / camera.aspect ** .6 : 1.05) * (steep ? 1.12 : 1);
     const dir = new THREE.Vector3(...(steep ? [.12, 1, .25] : [.45, .75, .8])).normalize();
-    center.copy(c); placeSun();
     if (intro && !reduce.matches) {
       const at = (a, k, up) => c.clone().add(dir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a).multiplyScalar(dist * k)).add(new THREE.Vector3(0, up * dist, 0));
       flight = null; camera.position.copy(at(-.9, 2.1, .25)); controls.target.copy(c); camera.lookAt(c);

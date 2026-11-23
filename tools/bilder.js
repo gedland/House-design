@@ -190,7 +190,8 @@ async function setWalk(page, v) {
 }
 
 async function open(browser, url, vp, scheme, log) {
-  const ctx = await browser.newContext({ ...vp.ctx, colorScheme: scheme, serviceWorkers: 'block', deviceScaleFactor: opt.skala });
+  // Redusert bevegelse: kameraflyvningene (dronetur, «Gå inn») blir øyeblikkelige, så bildet ikke tas midt i en flyvning.
+  const ctx = await browser.newContext({ ...vp.ctx, colorScheme: scheme, reducedMotion: 'reduce', serviceWorkers: 'block', deviceScaleFactor: opt.skala });
   await ctx.route(CDN, routeThree);
   const page = await ctx.newPage();
   page.on('pageerror', e => log.push(`${vp.name}: ${e.message}`));
@@ -203,6 +204,10 @@ async function open(browser, url, vp, scheme, log) {
     throw new Error(three.failed || `Appen startet ikke${msg?.trim() ? `: ${msg.trim()}` : ' innen 30 sekunder.'}`);
   }
   if (!(await page.evaluate(() => !!window.__bilder))) throw new Error('Fant ikke kamerakontrollen (OrbitControls ble ikke lastet via innpakningen).');
+  // Himmelkartet lastes etter at appen har startet. Vent på det (eller på en feil), ellers fotograferes reservehimmelen.
+  await page.waitForFunction(() => { const d = document.getElementById('view')?.dataset || {}; return !('sky' in d) || d.sky === 'hdri' || d.skyError; }, null, { timeout: 30000 }).catch(() => {});
+  const skyError = await page.evaluate(() => document.getElementById('view')?.dataset.skyError);
+  if (skyError) log.push(`${vp.name}: himmelkartet ble ikke lastet (${skyError})`);
   await page.evaluate(() => document.fonts.ready);
   await frames(page);
   return { page, ctx };
@@ -245,7 +250,7 @@ try {
       await page.locator('#floors button').nth(i + 1).click();
       await setOrbit(page, orbit(i, true, aspect)); await shot(page, `etasje-${i + 1}`, `Etasjevisning: ${f.name}`);
     }
-    await page.locator('#b-walk').click();
+    await page.locator('#b-walk').click(); await frames(page); // la appen lande inne før vinkelen settes
     for (const [key, label, calc] of INSIDE) {
       const v = calc(); if (!v) { skipped.add(`${label}: fant ikke rommet eller åpningen i demohuset`); continue; }
       await setWalk(page, v); await shot(page, key, label);
