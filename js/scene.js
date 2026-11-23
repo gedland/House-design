@@ -279,21 +279,43 @@ function buildRoof(house, upTo) {
 }
 
 // Omgivelseskart: himmel som blir lysere mot horisonten, og bakke under. Gir mykt lys fra alle kanter og noe å speile i glass og metall.
+// Samme himmel brukes i sanntid og i fotomodus (skyColor), så lyset blir likt.
+const SKY = { zenith: new THREE.Color('#a9c1dc'), horizon: new THREE.Color('#f2f2ee'), ground: new THREE.Color('#7d776c'), // nesten nøytralt, så fargene på huset ikke forskyves
+  sun: new THREE.Color('#fff2d8').multiplyScalar(6), sunDir: new THREE.Vector3(-9, 16, 7).normalize(), sunSize: Math.asin(1.2 / 9) };
+const skyColor = (y, c) => y >= 0 ? c.copy(SKY.horizon).lerp(SKY.zenith, Math.pow(y, .6)) : c.copy(SKY.horizon).lerp(SKY.ground, Math.min(1, -y * 6)); // y = retningens høyde, −1 til 1
 function skyEnvironment(renderer) {
   const geo = new THREE.SphereGeometry(10, 48, 24), pos = geo.attributes.position, col = [], c = new THREE.Color();
-  const zenith = new THREE.Color('#a9c1dc'), horizon = new THREE.Color('#f2f2ee'), ground = new THREE.Color('#7d776c'); // nesten nøytralt, så fargene på huset ikke forskyves
-  for (let i = 0; i < pos.count; i++) {
-    const h = pos.getY(i) / 10;
-    if (h >= 0) c.copy(horizon).lerp(zenith, Math.pow(h, .6)); else c.copy(horizon).lerp(ground, Math.min(1, -h * 6));
-    col.push(c.r, c.g, c.b);
-  }
+  for (let i = 0; i < pos.count; i++) { skyColor(pos.getY(i) / 10, c); col.push(c.r, c.g, c.b); }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   const sky = new THREE.Scene(); sky.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-  const sun = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff2d8').multiplyScalar(6) }));
-  sun.position.set(-9, 16, 7).setLength(9); sky.add(sun);
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 8), new THREE.MeshBasicMaterial({ color: SKY.sun }));
+  sun.position.copy(SKY.sunDir).multiplyScalar(9); sky.add(sun);
   const pmrem = new THREE.PMREMGenerator(renderer), env = pmrem.fromScene(sky, .02).texture;
   pmrem.dispose(); geo.dispose();
   return env;
+}
+// Ekvirektangulært flyttall-bilde (halv presisjon, som kan filtreres på alle WebGL2-enheter) der fn gir lyset i hver retning.
+// Samme oppsett som strålesporeren leser: u = atan(z, x) / 2π + ½, v = 1 − acos(y) / π.
+function equirect(W, H, fn) {
+  const data = new Uint16Array(W * H * 4), d = new THREE.Vector3(), c = new THREE.Color(), half = THREE.DataUtils.toHalfFloat;
+  for (let j = 0; j < H; j++) {
+    const y = -Math.cos((j + .5) / H * Math.PI), r = Math.sqrt(1 - y * y);
+    for (let i = 0; i < W; i++) {
+      const a = ((i + .5) / W - .5) * 2 * Math.PI, k = (j * W + i) * 4;
+      fn(d.set(Math.cos(a) * r, y, Math.sin(a) * r), c.setRGB(0, 0, 0));
+      data[k] = half(c.r); data[k + 1] = half(c.g); data[k + 2] = half(c.b); data[k + 3] = half(1);
+    }
+  }
+  const t = new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
+  t.mapping = THREE.EquirectangularReflectionMapping; t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+  return t;
+}
+// Mykt rundt mønster til bakken i fotomodus: fra midten (inner m) til kanten (outer m) av en 320 m bred skive.
+function radial(inner, outer, from, to) {
+  const c = Object.assign(document.createElement('canvas'), { width: 256, height: 256 }), x = c.getContext('2d'), k = 256 / 320;
+  const g = x.createRadialGradient(128, 128, inner * k, 128, 128, outer * k); g.addColorStop(0, from); g.addColorStop(1, to);
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c); // lineære verdier (ikke sRGB): tallet i bildet er andelen
 }
 // Three.js' filmiske ACES-kurve. Brukes baklengs på bakgrunnen, så den får akkurat den fargen vi ber om etter tonemappingen.
 const IN = [.59719, .076, .0284, .35458, .90834, .13383, .04823, .01566, .83777], OUT = [1.60475, -.10208, -.00327, -.53108, 1.10813, -.07276, -.07367, -.00605, 1.07602];
@@ -348,6 +370,9 @@ export function createView(canvas) {
   // Omgivelseskartet og kontaktskyggene trenger flyttall-bilder. Eldre mobiler uten dem får det enkle himmellyset fra før.
   const hdr = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
   if (hdr) { scene.environment = skyEnvironment(renderer); scene.environmentIntensity = .5; }
+  // Fotomodus (strålesporing) trenger WebGL2 og å kunne tegne til bilder med fulle flyttall. Mangler det, sier vi hvorfor.
+  const photoProblem = !renderer.capabilities.isWebGL2 ? 'Nettleseren har ikke WebGL2, som strålesporingen trenger.'
+    : !renderer.extensions.has('EXT_color_buffer_float') ? 'Grafikkbrikken eller nettleseren kan ikke tegne til flyttall-bilder (EXT_color_buffer_float), som strålesporingen trenger.' : null;
   const root = new THREE.Group(); root.name = 'Hus'; scene.add(root);
   const lamps = new THREE.Group(); lamps.name = 'Taklamper'; scene.add(lamps); // utenfor root: tas ikke med i valg eller GLB-eksport
   const sky = skyDome(); scene.add(sky);
@@ -428,6 +453,12 @@ export function createView(canvas) {
       }
       camera.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ');
     }
+    // Fotomodus: bildet bygges opp mens kameraet står stille. Flytter kameraet seg (dra, gå, flyvning, ny størrelse), er det slutt.
+    if (photo?.ready) {
+      camera.updateMatrixWorld();
+      if (camera.matrixWorld.equals(photo.m) && camera.projectionMatrix.equals(photo.p)) return photoFrame(t);
+      stopPhoto();
+    }
     if (dirty) {
       dirty = false; sky.position.copy(camera.position);
       composer ? composer.render(dt) : renderer.render(scene, camera);
@@ -437,7 +468,8 @@ export function createView(canvas) {
 
   // Taklamper: et varmt lys midt i taket i hvert rom. Om kvelden overalt, inne i huset også på dagtid.
   // Antallet er begrenset (hvert lys koster på mobil), og rommene nærmest etasjen du står i får lys først.
-  const discGeo = new THREE.CylinderGeometry(.17, .17, .012, 24), discMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff0d8').multiplyScalar(4) });
+  // Lampeskiven lyser av seg selv (emissive), så den også lyser i fotomodus. I sanntid ser den ut som før.
+  const discGeo = new THREE.CylinderGeometry(.17, .17, .012, 24), discMat = new THREE.MeshStandardMaterial({ color: '#000000', roughness: 1, emissive: '#fff0d8', emissiveIntensity: 4 });
   function updateLamps() {
     lamps.clear();
     const { house, floor } = shown;
@@ -467,6 +499,7 @@ export function createView(canvas) {
     hemi.color.set(mood.hemi[0]); hemi.groundColor.set(mood.hemi[1]); hemi.intensity = (hdr ? .3 : 1.5) * mood.hemi[2];
     if (hdr) scene.environmentIntensity = mood.env;
     placeSun(); lights(); invalidate();
+    if (photo?.ready) preparePhoto(); // nytt lys: begynn på nytt med samme kamera
   }
   // Lys som avhenger av både stemning og om du er inne: lamper, glødende ruter (bare sett utenfra) og fyllys inne.
   function lights() {
@@ -476,6 +509,7 @@ export function createView(canvas) {
 
   // floor = null viser hele huset med tak. Et tall viser etasjene til og med den, uten tak, så du ser ned i rommene.
   function build(house, { floor = null } = {}) {
+    stopPhoto(); // strålesporeren har en kopi av den gamle geometrien
     root.traverse(o => o.geometry?.dispose()); lit.forEach(m => m.dispose()); lit = []; root.clear(); byId = {};
     let y = 0;
     for (const [i, f] of house.floors.entries()) {
@@ -569,8 +603,75 @@ export function createView(canvas) {
     look3.set(x, y, z).project(camera); if (Math.abs(look3.z) > 1 || Math.abs(look3.x) > .95 || Math.abs(look3.y) > .95) return null;
     return [(look3.x + 1) / 2 * canvas.clientWidth, (1 - look3.y) / 2 * canvas.clientHeight];
   }
+
+  // Fotomodus med three-gpu-pathtracer: samme scene, materialer, lamper og sol som i sanntid. Lastes først når den brukes.
+  // Strålesporeren kjenner ikke halvkulelys, fyllys, ShaderMaterial eller tåke. Derfor får den et eget himmelbilde med
+  // omgivelseskartet, halvkulelyset og fyllyset regnet om til lys fra himmelen, himmelkuppelen som bakgrunnsbilde,
+  // og en bakke som tones over i horisontfargen slik tåken gjør i sanntid.
+  let pt = null, photo = null, fogGround = null, ptMaps = [];
+  async function startPhoto({ max, scale, tiles }) {
+    if (photoProblem) throw new Error(photoProblem);
+    if (flight) await new Promise(ok => { const f = flight, d = f.done; f.ms = 0; f.done = () => { d?.(); ok(); }; }); // la flyvningen lande først
+    photo = { max, ready: false };
+    const run = photo, { WebGLPathTracer } = await import('three-gpu-pathtracer');
+    if (photo !== run) return; // avbrutt mens biblioteket lastet
+    if (!pt) {
+      pt = new WebGLPathTracer(renderer);
+      pt.textureSize.set(256, 256); // mønstrene er 256 px
+      pt.bounces = 6; pt.filterGlossyFactor = .5; pt.minSamples = 3; // filterGlossyFactor: færre hvite prikker fra sola i glass
+      pt.rasterizeSceneCallback = () => composer ? composer.render() : renderer.render(scene, camera); // sanntidsbildet til strålesporingen tar over
+    }
+    pt.renderScale = scale; pt.tiles.set(tiles, tiles);
+    preparePhoto();
+  }
+  function preparePhoto() {
+    const L = (c, k) => new THREE.Color(c).multiplyScalar(k), a = L(hemi.groundColor, hemi.intensity), b = L(hemi.color, hemi.intensity), amb = L(fill.color, fill.intensity / Math.PI);
+    // Halvkulelys med himmelfarge b og bakkefarge a gir samme lys som en himmel med lysstyrke (a+b)/2π + 3(b−a)/4π · y.
+    const base = a.clone().add(b).multiplyScalar(1 / (2 * Math.PI)).add(amb), slope = b.clone().sub(a).multiplyScalar(3 / (4 * Math.PI)), env = scene.environmentIntensity;
+    const envMap = equirect(512, 256, (d, c) => {
+      if (d.angleTo(SKY.sunDir) < SKY.sunSize) c.copy(SKY.sun); else skyColor(d.y, c);
+      c.multiplyScalar(env).add(base); for (const k of ['r', 'g', 'b']) c[k] = Math.max(0, c[k] + slope[k] * d.y);
+    });
+    const u = sky.material.uniforms, sm = (e0, e1, x) => { const k = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return k * k * (3 - 2 * k); };
+    const bgMap = equirect(256, 128, (d, c) => { // samme formel som himmelkuppelen
+      const h = d.y;
+      if (h < .18) c.copy(u.horizon.value).lerp(u.mid.value, sm(-.02, .18, h)); else c.copy(u.mid.value).lerp(u.top.value, Math.pow((h - .18) / .82, .8));
+    });
+    fogGround ||= new THREE.MeshStandardMaterial({ roughness: 1, map: radial(45, 130, '#fff', '#000'), emissiveMap: radial(45, 130, '#000', '#fff') });
+    fogGround.color.copy(ground.material.color); fogGround.emissive.copy(scene.fog.color); fogGround.emissiveIntensity = 1;
+    const keep = { environment: scene.environment, background: scene.background, environmentIntensity: scene.environmentIntensity }, keepGround = ground.material;
+    Object.assign(scene, { environment: envMap, background: bgMap, environmentIntensity: 1 }); ground.material = fogGround; sky.visible = false;
+    try { pt.setScene(scene, camera); }
+    finally { Object.assign(scene, keep); ground.material = keepGround; sky.visible = true; }
+    ptMaps.forEach(m => m.dispose()); ptMaps = [envMap, bgMap];
+    camera.updateMatrixWorld();
+    Object.assign(photo, { ready: true, m: camera.matrixWorld.clone(), p: camera.projectionMatrix.clone(), k: 1, t: 0, seen: -1 });
+  }
+  function photoFrame(t) {
+    // Flere gjennomløp per bilde når maskinen klarer det: øk så lenge bildene kommer raskt, senk når de blir trege.
+    const gap = photo.t ? t - photo.t : 0; photo.t = t;
+    if (pt.samples < photo.max) {
+      if (gap) photo.k = gap < 24 ? Math.min(16, photo.k + 1) : gap > 45 ? Math.max(1, photo.k - 1) : photo.k;
+      const n = pt.isCompiling || pt.samples < pt.minSamples ? 1 : photo.k;
+      for (let i = 0; i < n && pt.samples < photo.max; i++) pt.renderSample();
+    }
+    const n = Math.min(photo.max, Math.floor(pt.samples));
+    if (n !== photo.seen) { photo.seen = n; api.onPhoto?.({ samples: n, max: photo.max, done: n >= photo.max, ready: n >= pt.minSamples }); }
+  }
+  function stopPhoto() { if (!photo) return; photo = null; dirty = true; api.onPhoto?.(null); }
+  // PNG av det strålesporede bildet. Bildet tegnes på nytt og leses av i samme slengen, før nettleseren tømmer lerretet.
+  function photoImage() {
+    return new Promise((ok, no) => {
+      if (!photo?.ready || pt.samples < pt.minSamples) return no(new Error('Bildet er ikke klart ennå.'));
+      const q = pt._quad.material, o = q.opacity; q.map = pt.target.texture; q.opacity = 1;
+      pt.renderToCanvasCallback(pt.target, renderer, pt._quad); q.opacity = o;
+      canvas.toBlob(b => b ? ok(b) : no(new Error('Nettleseren klarte ikke å lage bildet.')), 'image/png');
+    });
+  }
+
   resize();
   const api = { build, select, frame, setInset, setWalk, walkTo, look, go, pick, planePoint, hidden, screen, setMood, theme: invalidate, invalidate, controls, camera, root, onFrame: null,
+    photoProblem, startPhoto, stopPhoto, photoImage, onPhoto: null, get photo() { return !!photo; },
     get flying() { return !!flight; } };
   setMood('day');
   return api;

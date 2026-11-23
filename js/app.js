@@ -7,7 +7,7 @@ const btn = (textContent, onclick, p = {}) => h('button', { type: 'button', text
 const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
-const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, report: null, note: '' };
+const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, report: null, note: '', photo: null };
 let view;
 try { view = createView($('#view')); }
 catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
@@ -416,9 +416,44 @@ function moreSheet() {
       btn('Eksporter GLB (3D-fil)', exportGLB),
       h('label', { className: 'row' }, file, 'Importer JSON'),
       S.floor !== null && S.house.floors.length > 1 && btn(`Slett ${S.house.floors[S.floor].name}`, removeFloor, { className: 'danger' }),
-      btn('Åpne demohuset', () => { if (confirm('Bytte ut huset med demohuset? Du kan angre etterpå.')) replace(clone(DEMO)); }))];
+      btn('Åpne demohuset', () => { if (confirm('Bytte ut huset med demohuset? Du kan angre etterpå.')) replace(clone(DEMO)); })),
+    view.photoProblem && h('p', { className: 'hint', textContent: `Fotomodus (strålesporing) er skjult på denne enheten. ${view.photoProblem} Resten av appen virker som vanlig.` })];
 }
 function sheet(name) { commit(); S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
+
+// Fotomodus: strålesporing av det kameraet ser nå. Bildet blir bedre for hvert gjennomløp så lenge kameraet står stille.
+// Mobil: halv oppløsning, færre gjennomløp, og hvert gjennomløp delt i fire ruter så telefonen ikke henger.
+const PHOTO = matchMedia('(pointer: coarse)').matches ? { max: 300, scale: .5, tiles: 2 } : { max: 1000, scale: 1, tiles: 1 };
+async function startPhoto() {
+  if (S.photo || view.photoProblem) return;
+  commit(); S.sel = null; S.sheet = null; S.placing = null; S.move = false; S.note = '';
+  cancelAnimationFrame(drawT); drawT = 0; view.build(S.house, { floor: shown() }); // uten markering av valgt objekt
+  S.photo = { samples: 0, max: PHOTO.max, loading: true }; ui();
+  try { await view.startPhoto(PHOTO); }
+  catch (e) {
+    view.stopPhoto(); S.photo = null;
+    say(e.message === view.photoProblem ? e.message : /import|fetch|module/i.test(e.message) ? 'Kunne ikke laste strålesporingen (three-gpu-pathtracer fra cdn.jsdelivr.net). Sjekk nettforbindelsen og prøv igjen.' : `Fotomodus startet ikke: ${e.message}`);
+  }
+}
+view.onPhoto = p => {
+  if (!p) { if (S.photo) { S.photo = null; ui(); } return; }
+  if (S.photo) { Object.assign(S.photo, p, { loading: false }); showPhoto(); }
+};
+const photoBanner = () => [
+  h('div', { className: 'job small' }, h('p', { className: 'job-text' }), h('div', { className: 'bar', role: 'progressbar', ariaLabel: 'Gjennomløp', ariaValueMin: 0, ariaValueMax: 100 }, h('i')),
+    h('p', { className: 'job-hint', textContent: 'Hold kameraet i ro. Dra for å gå tilbake.' })),
+  btn('Lagre bilde', savePhoto, { className: 'save', disabled: true }), btn('Ferdig', () => view.stopPhoto())];
+function showPhoto() {
+  const p = S.photo, el = p && $('#banner .job'); if (!el) return;
+  el.querySelector('.job-text').textContent = p.loading ? 'Gjør klar strålesporing …' : p.done ? `Ferdig: ${p.max} gjennomløp` : `${p.samples} av ${p.max} gjennomløp`;
+  const pct = p.loading ? 0 : p.samples / p.max * 100;
+  el.querySelector('.bar i').style.width = `${pct.toFixed(1)}%`; el.querySelector('.bar').ariaValueNow = Math.round(pct);
+  $('#banner .save').disabled = !p.ready;
+}
+async function savePhoto() {
+  try { download(await view.photoImage(), fileName('png')); }
+  catch (e) { const el = $('#banner .job-hint'); if (el) el.textContent = e.message; }
+}
 
 // Interiørmodus
 const inRoom = (f, x, z) => f.rooms.find(r => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d);
@@ -466,15 +501,15 @@ function ui() {
   const el = $('#panel'), f = S.sel && find(S.house, S.sel);
   const content = f ? selectionPanel(f) : S.sheet === 'add' ? addSheet() : S.sheet === 'photos' ? photoSheet() : S.sheet === 'more' ? moreSheet() : S.sheet === 'report' ? reportSheet() : null;
   const job = S.job && S.sheet !== 'photos';
-  const banner = S.placing ? `Trykk på veggen der ${S.placing === 'door' ? 'døren' : 'vinduet'} skal stå.` : !content && (job || S.note);
-  document.body.className = [content && 'has-panel', f && S.move && 'moving', S.walk && 'walk', (S.placing || banner) && 'has-banner', localStorage.tipSeen && 'seen'].filter(Boolean).join(' ');
+  const banner = S.photo || (S.placing ? `Trykk på veggen der ${S.placing === 'door' ? 'døren' : 'vinduet'} skal stå.` : !content && (job || S.note));
+  document.body.className = [content && 'has-panel', f && S.move && 'moving', S.walk && 'walk', S.photo && 'photo', (S.placing || banner) && 'has-banner', localStorage.tipSeen && 'seen'].filter(Boolean).join(' ');
   el.replaceChildren(...(content || []).filter(Boolean), ...(content && S.note && S.sheet !== 'photos' ? [h('p', { className: 'note', role: 'status', textContent: S.note })] : []));
-  $('#banner').replaceChildren(...(!banner ? [] : job && !S.placing ? [jobView(true), btn('Vis', () => sheet('photos'))]
+  $('#banner').replaceChildren(...(!banner ? [] : S.photo ? photoBanner() : job && !S.placing ? [jobView(true), btn('Vis', () => sheet('photos'))]
     : [h('span', { textContent: S.placing ? (S.note || banner) : banner }), btn(S.placing ? 'Avbryt' : 'OK', () => { S.placing = null; say(''); })]));
-  showJob();
+  showJob(); showPhoto();
   const fl = S.house.floors, chip = (label, on, fn) => btn(label, fn, { ariaPressed: String(on) });
   $('#floors').replaceChildren(...(S.walk
-    ? [btn('Ut av huset', leave, { className: 'out' }), fl.length > 1 && btn('Opp', () => climb(1), { disabled: !fl[S.walk.floor + 1] }), fl.length > 1 && btn('Ned', () => climb(-1), { disabled: !S.walk.floor })]
+    ? [btn('Ut av huset', leave, { className: 'out' }), !view.photoProblem && btn('Foto', startPhoto), fl.length > 1 && btn('Opp', () => climb(1), { disabled: !fl[S.walk.floor + 1] }), fl.length > 1 && btn('Ned', () => climb(-1), { disabled: !S.walk.floor })]
     : [chip('Hele huset', S.floor === null, () => showFloor(null)), ...fl.map((x, i) => chip(x.name, S.floor === i, () => showFloor(i)))]).filter(Boolean));
   const wide = matchMedia('(min-width: 760px)').matches;
   view.setInset(content && wide ? el.offsetWidth + 10 : 0, content && !wide ? el.offsetHeight : 0);
@@ -582,7 +617,7 @@ const up = e => {
   if (!down || e.pointerId !== down.id) return;
   const d = down; down = null;
   if (d.drag) { view.controls.enabled = !S.walk; commit(); }
-  else if (e.type === 'pointerup' && !d.far) { const hit = view.pick(e); if (S.placing) placeOn(hit); else if (S.sheet && !hit) sheet(null); else select(hit?.id); }
+  else if (e.type === 'pointerup' && !d.far && !S.photo) { const hit = view.pick(e); if (S.placing) placeOn(hit); else if (S.sheet && !hit) sheet(null); else select(hit?.id); }
 };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 // Etter et trykk sender mobilnettlesere også et klikk. Panelet har da åpnet seg under fingeren, så klikket ville truffet «Slett» eller «Lukk». Stopp det.
@@ -597,9 +632,11 @@ $('#undo').onclick = () => {
   select(S.sel); save(true);
 };
 $('#b-photos').onclick = () => { sheet('photos'); checkServer(); }; $('#b-add').onclick = () => sheet('add'); $('#b-more').onclick = () => sheet('more'); $('#b-walk').onclick = enter;
+$('#b-photo').onclick = startPhoto; $('#b-photo').hidden = !!view.photoProblem;
 addEventListener('keydown', e => {
   if (e.target.matches('input, select, textarea')) return;
   const k = e.key.toLowerCase();
+  if (S.photo) { if (k === 'escape') view.stopPhoto(); return; }
   if (S.walk && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) { e.preventDefault(); keys.add(k); return keyMove(); }
   if (k === 'escape') { if (S.sel || S.sheet || S.placing) { S.placing = null; S.sheet = null; S.note = ''; select(null); } else if (S.walk) leave(); }
   if ((k === 'delete' || k === 'backspace') && S.sel) remove();

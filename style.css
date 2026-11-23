@@ -41,10 +41,11 @@ header .round svg { width: 20px; height: 20px; }
 #floors button { pointer-events: auto; flex: none; min-height: 40px; padding: 0 14px; font-size: 14.5px; font-weight: 500; white-space: nowrap; }
 #floors button[aria-pressed=true], #floors .out { background: var(--accent); color: var(--on-accent); box-shadow: var(--shadow); }
 
-#bar { position: fixed; left: 50%; translate: -50% 0; bottom: calc(env(safe-area-inset-bottom) + 12px); width: min(calc(100% - 20px), 420px); display: grid; grid-template-columns: repeat(4, 1fr);
+#bar { position: fixed; left: 50%; translate: -50% 0; bottom: calc(env(safe-area-inset-bottom) + 12px); width: min(calc(100% - 20px), 480px); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   padding: 4px; border-radius: 16px; }
 #bar button { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 6px 2px; font-size: 12.5px; font-weight: 500; }
 #bar svg { width: 22px; height: 22px; }
+#bar button[hidden] { display: none; }
 #tip, #banner { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 84px); translate: -50% 0; width: max-content; max-width: calc(100% - 32px);
   padding: 9px 14px; font-size: 14px; border-radius: 12px; }
 #tip { text-align: center; color: var(--muted); pointer-events: none; }
@@ -59,6 +60,13 @@ header .round svg { width: 20px; height: 20px; }
 .walk #stick { display: grid; }
 .walk.has-panel #stick, .walk.has-banner #stick { display: none; }
 .walk #banner, .walk #tip { bottom: calc(env(safe-area-inset-bottom) + 24px); }
+/* Fotomodus: bare bildet, fremdriften og knappene. */
+.photo #bar, .photo #tip, .photo #labels, .photo #floors, .photo #caption, .photo #stick { display: none; }
+.photo #banner { bottom: calc(env(safe-area-inset-bottom) + 16px); width: min(calc(100% - 20px), 460px); }
+.photo .job.small { gap: 4px; }
+.photo .job-hint { font-size: 12.5px; color: var(--muted); }
+#banner .save { background: var(--accent); color: var(--on-accent); border-radius: 10px; }
+#banner .save:disabled { opacity: .45; }
 
 #panel { position: fixed; left: 0; right: 0; bottom: 0; max-height: 46dvh; overflow-y: auto; overscroll-behavior: contain; display: none; flex-direction: column; gap: 12px;
   padding: 14px calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px);
