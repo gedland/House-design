@@ -213,7 +213,7 @@ function addSheet() {
 // Bilder inn → 3D-modell. Bildene krympes i nettleseren (lang side 1280 px, JPEG) og sendes til serveren, som spør Claude.
 // S.photos: [{ key, name, data, thumb }]. S.prep: krymping pågår { done, total }. S.job: tolkning pågår { stage, part, chars, t0, xhr }.
 // S.server: 'ok' | 'nokey' | 'none' (ingen Husform-server svarte) | null (ikke sjekket ennå).
-const MIN = 3, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
+const MIN = 1, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
   catch { // eldre nettlesere og formater createImageBitmap ikke tar: prøv vanlig <img>
@@ -360,7 +360,7 @@ async function analyze() {
     let house;
     try { house = normalize(res.house); } catch (e) { throw failed(`Claude svarte, men modellen kunne ikke brukes: ${e.message} Prøv igjen.`); }
     S.photos = []; S.job = null; replace(house);
-    S.report = res.report || { fixed: [], problems: [], guesses: '' }; sheet('report');
+    S.report = res.report || {}; sheet('report');
   } catch (e) {
     S.job = null;
     if (!e.shown && !e.aborted) console.error(e);
@@ -369,37 +369,49 @@ async function analyze() {
 }
 function cancelJob() { S.job?.xhr?.abort(); }
 // Etter tolkningen: hva kontrollen rettet, hva som bør sjekkes, og hva Claude anslo uten å se det.
+// Det anslåtte står først, i en egen boks: det er det eieren mest sannsynlig må rette.
 function reportSheet() {
-  const { fixed = [], problems = [], guesses = '' } = S.report || {}, items = l => h('ul', {}, l.map(t => h('li', { textContent: t })));
+  const r = S.report || {}, lines = v => (Array.isArray(v) ? v : v ? [v] : []).map(String).filter(t => t.trim());
+  const fixed = lines(r.fixed), problems = lines(r.problems), missing = lines(r.missing), guesses = lines(r.guesses), n = +r.photos || 0;
+  const items = l => h('ul', {}, l.map(t => h('li', { textContent: t })));
+  const few = n > 0 && n < 4 ? `Modellen bygger på ${n === 1 ? 'ett bilde' : `bare ${n} bilder`}, så mye er anslått. ` : '';
   return [head(S.house.name, 'Modellen er klar', () => sheet(null)),
-    h('p', { className: 'hint', textContent: 'Målene er anslag. Trykk på en vegg, et rom, et vindu eller et møbel for å rette det.' }),
+    h('p', { className: 'hint', textContent: `${few}Alle mål er anslag. Trykk på en vegg, et rom, et vindu eller et møbel for å rette det.` }),
     h('div', { className: 'report' },
+      (missing.length || guesses.length) ? h('section', { className: 'guessed' },
+        h('h3', { textContent: 'Anslått – synes ikke i bildene' }),
+        missing.length > 0 && h('p', { className: 'missing', textContent: `Ikke fotografert: ${missing.map((t, i) => i ? t[0].toLowerCase() + t.slice(1) : t).join(', ')}.` }),
+        guesses.length > 0 && items(guesses))
+        : h('p', { textContent: 'Claude meldte ingen deler som måtte anslås uten bilde. Målene er likevel anslag.' }),
       problems.length ? [h('h3', { textContent: 'Bør sjekkes' }), items(problems)] : h('p', { textContent: 'Kontrollen fant ingen feil som står igjen.' }),
-      guesses && [h('h3', { textContent: 'Anslått uten å synes i bildene' }), h('p', { textContent: guesses })],
       fixed.length > 0 && h('details', {}, h('summary', { textContent: `Kontrollen rettet ${fixed.length} ting automatisk` }), items(fixed))),
     btn('Se modellen', () => sheet(null), { className: 'primary' })];
 }
 function photoSheet() {
   const n = S.photos.length, busy = !!S.job, prep = S.prep;
   const file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: e => { const f = [...e.target.files]; e.target.value = ''; addPhotos(f); } });
-  const intro = { ok: `Velg ${MIN}–${MAX} bilder av ett hus, både ute og inne: alle sider av huset utenfra, og hvert rom innenfra. Jo flere vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.`,
+  const intro = { ok: `Velg 1–${MAX} bilder av ett hus. Ett bilde holder for en første modell: det som ikke synes, anslås, og rapporten etterpå viser hva som er anslått. Målene er anslag du kan rette.`,
     nokey: 'Serveren har ingen API-nøkkel for Claude, så bildene kan ikke tolkes. Den som driver serveren, må legge ANTHROPIC_API_KEY=... i filen .env og starte node server.js på nytt. Imens kan du prøve appen med demohuset.',
     none: 'Fant ingen Husform-server å sende bildene til. Bildetolkning krever at appen kjøres med node server.js (ikke som statiske filer) og at du er på nett. Imens kan du prøve appen med demohuset.' }[S.server] || 'Sjekker serveren …';
   const ok = S.server === 'ok';
   const status = ok && [
     h('div', { className: 'count' },
       h('strong', { textContent: `${n} av ${MAX} bilder valgt` }),
-      h('span', { textContent: prep ? `Krymper bilde ${Math.min(prep.done + 1, prep.total)} av ${prep.total} …` : n < MIN ? `Velg minst ${MIN - n} til` : '' })),
+      h('span', { textContent: prep ? `Krymper bilde ${Math.min(prep.done + 1, prep.total)} av ${prep.total} …` : n > 0 && n < 4 ? 'Flere bilder gir mindre gjetting' : '' })),
     S.note && h('p', { className: 'note', role: 'status', textContent: S.note })];
   const grid = ok && h('ul', { className: 'photos', ariaLabel: 'Valgte bilder' },
     S.photos.map((p, i) => h('li', {}, h('img', { src: p.thumb, alt: p.name }),
       btn('✕', () => removePhoto(i), { className: 'del', ariaLabel: `Fjern ${p.name}`, disabled: busy }))),
     n + (prep ? prep.total - prep.done : 0) < MAX && !busy && h('li', {}, file, btn(prep ? '…' : '+ Legg til', () => file.click(), { className: 'pick', disabled: !!prep })));
-  const go = ok && !busy && btn(n < MIN ? `Velg minst ${MIN} bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: n < MIN || !!prep });
+  // Sjekklisten er en påminnelse, ikke et krav: appen vet ikke hva hvert bilde viser før Claude har sett dem.
+  const tips = ok && !busy && h('div', { className: 'tips' }, h('h3', { textContent: 'Dette gir best modell' }),
+    h('ul', {}, ['Alle fasadene: forsiden, baksiden og begge sidene', 'Taket, gjerne skrått ovenfra eller fra litt avstand', 'Hvert rom innenfra, helst fra et hjørne så flere vegger synes']
+      .map(t => h('li', { textContent: t }))));
+  const go = ok && !busy && btn(n < MIN ? 'Velg minst ett bilde' : `Lag 3D-modell av ${n === 1 ? 'ett bilde' : `${n} bilder`}`, analyze, { className: 'primary', disabled: n < MIN || !!prep });
   // Mens tolkningen pågår, står fremdriften øverst så den synes uten å rulle.
   return [head('Nytt hus', 'Fra bilder til 3D', () => sheet(null)),
     busy ? [jobView(false), btn('Avbryt', cancelJob, { className: 'secondary' })] : h('p', { className: 'hint', textContent: intro }),
-    status, grid, go,
+    tips, status, grid, go,
     S.server === 'none' && btn('Prøv å nå serveren igjen', () => { S.server = null; ui(); checkServer(); }, { className: 'secondary' }),
     !ok && S.server && btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })].flat();
 }
