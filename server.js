@@ -114,8 +114,35 @@ ${problems.map(p => `- ${p.text}`).join('\n')}
 
 Rett feilene og send hele huset på nytt i samme format, med survey oppdatert. Behold det som var riktig. Husk at ytterveggene i hver etasje skal danne én lukket ring der hver vegg begynner nøyaktig der den forrige slutter, og at rommene skal ligge innenfor ytterveggene, kant i kant uten overlapp, og fylle hele flaten.`;
 
+// Leser et JSON-svar som fortsatt strømmer inn. Gir objektet så langt, der bare ferdige objekter i lister er med:
+// et rom eller et møbel dukker opp først når det er skrevet ferdig, mens etasjer og huset rundt dem vokser underveis.
+// Trygge kuttpunkter er rett etter [ og etter ] eller } som lukker noe, og foran komma i en liste. Der lukkes resten med ] og }.
+function partialJSON() {
+  let text = '', i = 0, str = false, esc = false, cut = 0, tail = '';
+  const stack = [];
+  const mark = at => { cut = at; tail = stack.map(c => c === '{' ? '}' : ']').reverse().join(''); };
+  return {
+    push(t) {
+      text += t;
+      for (; i < text.length; i++) {
+        const c = text[i];
+        if (str) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') str = false; continue; }
+        if (c === '"') str = true;
+        else if (c === '{') stack.push(c);
+        else if (c === '[') { stack.push(c); mark(i + 1); }
+        else if (c === '}' || c === ']') { stack.pop(); mark(i + 1); }
+        else if (c === ',' && stack.at(-1) === '[') mark(i);
+      }
+    },
+    get length() { return text.length; },
+    value() { if (!cut) return null; try { return JSON.parse(text.slice(0, cut) + tail); } catch { return null; } },
+  };
+}
+
 let client;
-// Ett kall til Claude. on(progress) får { stage } når svaret begynner og { stage, chars } mens modellen skrives.
+// Ett kall til Claude. on(progress) får { stage } når svaret begynner, { stage, chars } mens det skrives
+// og { preview } (huset så langt) når grunnflaten i første etasje er skrevet. I første runde er stage 'look' mens Claude tenker
+// og skriver befaringen, og 'write' fra huset begynner; chars teller da tegnene i huset.
 async function ask(Anthropic, messages, on, signal, stage) {
   let msg;
   try {
@@ -126,10 +153,20 @@ async function ask(Anthropic, messages, on, signal, stage) {
       system: PROMPT, messages,
     });
     if (signal.aborted) stream.abort(); else signal.addEventListener('abort', () => stream.abort(), { once: true });
-    let chars = 0;
+    const json = partialJSON(); let houseAt = stage === 'write' ? -1 : 0, parsed = 0, sent = '';
     stream.on('streamEvent', ev => {
       if (ev.type === 'message_start') on({ stage: stage === 'write' ? 'look' : stage });
-      else if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') on({ stage, chars: chars += ev.delta.text.length });
+      if (ev.type !== 'content_block_delta' || ev.delta.type !== 'text_delta') return;
+      json.push(ev.delta.text);
+      // Delvis tolking koster litt, så den kjøres høyst hvert 0,6 sekund, og bare i første runde.
+      const t = Date.now();
+      if (stage === 'write' && t - parsed > 600) {
+        parsed = t; const house = json.value()?.house;
+        if (house && houseAt < 0) houseAt = json.length;
+        const f = house?.floors?.[0], s = Array.isArray(f?.rooms) && f.rooms.length && Array.isArray(f.walls) && JSON.stringify(house);
+        if (s && s !== sent) { sent = s; on({ preview: house }); }
+      }
+      on({ stage: houseAt < 0 ? 'look' : stage, chars: json.length - Math.max(0, houseAt) });
     });
     msg = await stream.finalMessage();
   } catch (e) {
@@ -212,8 +249,9 @@ const readBody = req => new Promise((ok, no) => {
   req.on('close', () => { if (!req.complete) no(fail(499, 'Avbrutt.')); });
 });
 // POST /api/analyze. Feil før Claude har begynt å svare, får vanlig HTTP-status og { error }.
-// Etter det strømmes linjer med JSON (NDJSON): { type: 'progress', stage, chars? } og { type: 'beat' } underveis,
+// Etter det strømmes linjer med JSON (NDJSON): { type: 'progress', stage, chars? }, { type: 'preview', house } og { type: 'beat' } underveis,
 // så { type: 'done', house, report, survey } eller { type: 'error', error }. stage: look → write → check → (fix) .
+// preview er huset slik det er skrevet så langt (uten id-er, ikke normalisert), fra grunnflaten i første etasje finnes.
 async function analyzeRoute(req, res) {
   const ac = new AbortController();
   res.on('close', () => { if (!res.writableFinished) ac.abort(); });
@@ -225,6 +263,7 @@ async function analyzeRoute(req, res) {
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       beat = setInterval(() => line({ type: 'beat' }), 15000); // holder forbindelsen åpen mens Claude tenker
     }
+    if (p.preview) return line({ type: 'preview', house: p.preview });
     if (p.chars != null) { const t = Date.now(); if (t - last < 400) return; last = t; }
     line({ type: 'progress', ...p });
   };

@@ -70,7 +70,9 @@
 if ('serviceWorker' in navigator) {
   // Når en ny versjon tar over, lastes siden én gang på nytt så alle filene kommer fra samme versjon.
   const had = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !sessionStorage.swReload) { sessionStorage.swReload = 1; location.reload(); } });
+  // Ikke mens en tolkning pågår (husformJob), for da måtte bildene lastes opp på nytt.
+  const busy = () => { try { return !!localStorage.husformJob; } catch (e) { return false; } };
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !sessionStorage.swReload && !busy()) { sessionStorage.swReload = 1; location.reload(); } });
   navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });
 }
 </script>
