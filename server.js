@@ -1,5 +1,5 @@
 // Husform-server: serverer appen og POST /api/analyze (bilder → hus-JSON via Claude). Node 18+.
-// API-nøkkelen leses fra miljøet eller .env og forlater aldri serveren. Uten nøkkel svarer /api/status {ai:false} og appen viser demohuset.
+// API-nøkkelen leses fra miljøet (hemmelighet hos verten) eller fra .env lokalt, og forlater aldri serveren. Uten nøkkel svarer /api/status {ai:false} og appen viser demohuset.
 const http = require('http'), fs = require('fs'), path = require('path');
 for (const f of ['.env', '.env.local']) try {
   for (const l of fs.readFileSync(path.join(__dirname, f), 'utf8').split(/\r?\n/)) {
@@ -127,9 +127,9 @@ async function ask(Anthropic, messages, on, signal, stage) {
     msg = await stream.finalMessage();
   } catch (e) {
     if (signal.aborted) throw fail(499, 'Avbrutt.');
-    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw fail(401, 'API-nøkkelen ble avvist av Anthropic. Sjekk ANTHROPIC_API_KEY i .env på serveren.');
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) throw fail(401, 'API-nøkkelen ble avvist av Anthropic. Sjekk ANTHROPIC_API_KEY på serveren.');
     if (e instanceof Anthropic.RateLimitError) throw fail(429, 'For mange forespørsler, eller kvoten hos Anthropic er brukt opp. Vent litt og prøv igjen.');
-    if (e instanceof Anthropic.NotFoundError) throw fail(502, `Modellen «${MODEL}» finnes ikke. Sjekk CLAUDE_MODEL i .env.`);
+    if (e instanceof Anthropic.NotFoundError) throw fail(502, `Modellen «${MODEL}» finnes ikke. Sjekk CLAUDE_MODEL på serveren.`);
     if (e instanceof Anthropic.BadRequestError) throw fail(400, `Claude API avviste forespørselen: ${e.message}`);
     if (e instanceof Anthropic.APIConnectionError) throw fail(502, 'Serveren fikk ikke kontakt med Claude API. Sjekk nettforbindelsen til serveren og prøv igjen.');
     if (e instanceof Anthropic.APIError && e.status === 413) throw fail(413, 'Bildene er for store til sammen for Claude API. Bruk færre bilder.');
@@ -185,7 +185,9 @@ async function analyze(images, on, signal) {
   return { house: result.house, report, survey: data.survey };
 }
 
-const TYPES = { html: 'text/html', css: 'text/css', js: 'text/javascript', json: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png' };
+const TYPES = { html: 'text/html', css: 'text/css', js: 'text/javascript', json: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp' };
+// Teksturene i textures/ serveres også, ellers får modellen bare ren farge.
+const TEXTURE = /^textures\/[a-z_]+\.webp$/;
 const FILES = ['index.html', 'style.css', 'js/app.js', 'js/scene.js', 'js/house.js', 'manifest.json', 'service-worker.js', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const send = (res, status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
 // Leser hele forespørselen. Er den for stor, leses resten uten å lagres, slik at nettleseren faktisk får 413-svaret.
@@ -220,7 +222,7 @@ async function analyzeRoute(req, res) {
   };
   try {
     const { images } = await readBody(req);
-    if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Legg ANTHROPIC_API_KEY=... i filen .env og start node server.js på nytt.');
+    if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Sett ANTHROPIC_API_KEY (i .env lokalt, som hemmelighet hos verten) og start serveren på nytt.');
     if (!Array.isArray(images) || images.length < 5) throw fail(400, `Velg minst 5 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
     if (images.length > 30) throw fail(400, `Du kan sende høyst 30 bilder (fikk ${images.length}).`);
     const done = await analyze(images, on, ac.signal);
@@ -234,12 +236,14 @@ async function analyzeRoute(req, res) {
 }
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
+  if (url === '/healthz') return send(res, 200, { ok: true, ai: !!KEY }); // helsesjekk for verten, kaller ikke Claude
   if (url === '/api/status') return send(res, 200, { ai: !!KEY });
   if (url === '/api/analyze') return req.method === 'POST' ? analyzeRoute(req, res) : send(res, 405, { error: 'Bruk POST.' });
   const name = url === '/' ? 'index.html' : url.slice(1);
-  if (!FILES.includes(name) || req.method !== 'GET') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Ikke funnet'); }
+  if (!(FILES.includes(name) || TEXTURE.test(name)) || req.method !== 'GET') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Ikke funnet'); }
   const type = TYPES[name.split('.').pop()];
-  fs.readFile(path.join(__dirname, name), (err, buf) => { res.writeHead(err ? 500 : 200, { 'Content-Type': type + (type.startsWith('image/png') ? '' : '; charset=utf-8'), 'Cache-Control': 'no-cache' }); res.end(err ? 'Feil' : buf); });
+  fs.readFile(path.join(__dirname, name), (err, buf) => { res.writeHead(err ? 404 : 200, { 'Content-Type': err ? 'text/plain; charset=utf-8' : type + (type.startsWith('image/') && type !== 'image/svg+xml' ? '' : '; charset=utf-8'), 'Cache-Control': 'no-cache' }); res.end(err ? 'Ikke funnet' : buf); });
 });
-const PORT = +E.PORT || 3000, HOST = E.HOST || '127.0.0.1';
-server.listen(PORT, HOST, () => console.log(`Husform: http://localhost:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+// Verten setter PORT. På Render og Railway må serveren lytte på alle grensesnitt; lokalt bare på maskinen selv.
+const PORT = +E.PORT || 3000, HOST = E.HOST || (E.RENDER || E.RAILWAY_PROJECT_ID ? '0.0.0.0' : '127.0.0.1');
+server.listen(PORT, HOST, () => console.log(`Husform: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));

@@ -1,0 +1,14 @@
+# Render Blueprint for Husform. Render → New → Blueprint → velg dette repoet.
+# ANTHROPIC_API_KEY står bare som navn her (sync: false): verdien fylles inn hos Render som hemmelighet, aldri i repoet.
+services:
+  - type: web
+    name: husform
+    runtime: node
+    plan: free # sover etter en stund uten trafikk; første forespørsel etterpå tar noen sekunder
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
