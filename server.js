@@ -250,7 +250,8 @@ const server = http.createServer(async (req, res) => {
   });
 });
 // Verten setter PORT. På Render og Railway må serveren lytte på alle grensesnitt; lokalt bare på maskinen selv.
-// Testene (test/fake-server.js) låner serveren for de statiske filene og bytter ut /api/*, så den startes bare når filen kjøres direkte.
-module.exports = server;
+// Startes serveren direkte (node server.js), lytter den. Importeres den, lytter den ikke: testene (test/fake-server.js)
+// låner serveren for de statiske filene og bytter ut /api/*, og eval/kjor.mjs bruker bare analyze().
 const PORT = +E.PORT || 3000, HOST = E.HOST || (E.RENDER || E.RAILWAY_PROJECT_ID ? '0.0.0.0' : '127.0.0.1');
 if (require.main === module) server.listen(PORT, HOST, () => console.log(`Husform: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+module.exports = { server, analyze, MODEL, hasKey: !!KEY };

@@ -4,7 +4,9 @@
   "description": "Bilder av ett hus inn, redigerbar 3D-modell ut.",
   "scripts": {
     "start": "node server.js",
-    "test": "playwright test"
+    "test": "playwright test",
+    "eval": "node eval/kjor.mjs",
+    "eval:bilder": "node eval/tegn.mjs"
   },
   "engines": {
     "node": ">=18"

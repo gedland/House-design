@@ -2,7 +2,7 @@
 // mens /api/status sier at AI er på, og /api/analyze strømmer et ferdig hus (test/fixtures/house.json) i samme
 // NDJSON-format som den ekte serveren: fremdrift for hvert steg, så huset, delt over flere biter så appen må sette dem sammen.
 const http = require('http');
-const app = require('../server.js');
+const app = require('../server.js').server;
 const house = require('./fixtures/house.json');
 
 const wait = ms => new Promise(r => setTimeout(r, ms));

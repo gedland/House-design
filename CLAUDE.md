@@ -44,5 +44,7 @@ lagres, angres og eksporteres sammen med resten.
 - JSON-skjemaet står øverst i `js/house.js`. `normalize()` der må tåle alt som kommer
   fra AI, fil og lagring. Endres skjemaet, oppdater også prompten i `server.js`.
 - `js/scene.js` tegner JSON til Three.js, `js/app.js` er grensesnitt og redigering.
+- `eval/` har hus med bilder og fasit. Endres prompten eller skjemaet, kjør `npm run eval` før og etter
+  og sammenlign rapportene (se `eval/README.md`).
 - Ingen byggesteg: vanilla JS med Three.js fra CDN.
 - Ved endringer i appfilene: øk `VERSION` i `service-worker.js`.

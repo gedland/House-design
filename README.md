@@ -52,5 +52,6 @@ Første kommando trengs bare én gang per maskin. `npm test` kjører en Playwrig
 - `modeller/`: ferdige hus i JSON-skjemaet, som kan åpnes med «Mer» → «Importer JSON». `haukeberget-17.json` er tolket fra planløsningene (U.etg og 1.etg) og bildene av huset.
 - `server.js`: statiske filer og `POST /api/analyze`. Svaret strømmes som linjer med JSON (fremdrift, så huset eller en feil).
 - `test/`: ende-til-ende-testen (`flyt.spec.js`), testserveren med falsk tolkning og testhuset. Oppsett i `playwright.config.js`.
+- `eval/`: hus med bilder og fasit, og `npm run eval`, som kjører tolkningen på dem, måler grunnflate, etasjer, takform og dører og vinduer per fasade, og foreslår endringer i prompten. Se `eval/README.md`.
 
 Ved endringer i filene: øk `VERSION` i `service-worker.js`.

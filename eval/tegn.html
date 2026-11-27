@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<title>Husform eval: tegn bilder</title>
+<style>html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; } canvas { display: block; width: 100vw; height: 100vh; }</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script type="module">
+// Tegner et fasit-hus med appens egen scene (js/scene.js) og stiller kameraet der en person ville tatt bildene.
+// Styres fra eval/tegn.mjs: window.husform.load(house) gir listen over bilder, window.husform.shot(i) stiller kameraet.
+import { createView } from '../js/scene.js';
+import { normalize, bounds } from '../js/house.js';
+
+const view = createView(document.getElementById('view'));
+const frames = n => new Promise(ok => { const f = () => --n ? requestAnimationFrame(f) : ok(); requestAnimationFrame(f); });
+let shots = [];
+
+function plan(house) {
+  const all = house.floors.map(bounds).filter(Boolean);
+  const b = { x0: Math.min(...all.map(a => a.x0)), x1: Math.max(...all.map(a => a.x1)), z0: Math.min(...all.map(a => a.z0)), z1: Math.max(...all.map(a => a.z1)) };
+  const W = b.x1 - b.x0, D = b.z1 - b.z0, cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
+  const walls = house.floors.reduce((s, f) => s + f.height, 0), r = house.roof;
+  const top = walls + (r && r.type !== 'flat' ? Math.min(W, D) / 2 * Math.tan(r.pitch * Math.PI / 180) : .3);
+  // Avstand som får en fasade med bredde w og høyde top inn i bildet (synsvinkel 50° loddrett, 4:3).
+  const fit = w => Math.max((w / 2 + 1.5) / Math.tan(31.8 * Math.PI / 180), (top + 1) / Math.tan(25 * Math.PI / 180)) * 1.05;
+  const out = (name, pos, at) => ({ name, pos, at });
+  const mid = top * .45;
+  const list = [
+    out('forside', [cx + W * .12, 1.7, b.z1 + fit(W)], [cx, mid, b.z1]),
+    out('forside-skraa', [b.x0 - fit(W) * .55, 4.5, b.z1 + fit(W) * .7], [cx, mid, cz]),
+    out('hoyre', [b.x1 + fit(D), 1.7, cz - D * .12], [b.x1, mid, cz]),
+    out('bakside', [cx - W * .12, 1.7, b.z0 - fit(W)], [cx, mid, b.z0]),
+    out('venstre', [b.x0 - fit(D), 1.7, cz + D * .12], [b.x0, mid, cz]),
+    out('bak-skraa-ovenfra', [b.x1 + fit(W) * .6, top + 6, b.z0 - fit(W) * .6], [cx, walls * .6, cz]),
+  ];
+  // Inne: stå i hjørnet av rommet som ligger nærmest midten av huset, og se på skrå mot det motsatte hjørnet (mot ytterveggene).
+  let y = 0;
+  const inside = [];
+  house.floors.forEach((f, i) => {
+    // Oppholdsrom, størst først. En gang eller et bad sier lite om hvor rommene ligger.
+    const big = [...f.rooms].sort((p, q) => q.w * q.d - p.w * p.d).filter(rm => rm.w > 1.8 && rm.d > 1.8 && !/gang|bad|bod|vask|wc/i.test(rm.name));
+    const kitchen = big.find(rm => /kjøkken/i.test(rm.name) && rm !== big[0]);
+    const rest = big.filter(rm => rm !== big[0] && rm !== kitchen);
+    const pickRooms = i ? [big[0]] : [big[0], kitchen || rest.shift(), house.floors.length === 1 ? rest[0] : null];
+    for (const rm of pickRooms.filter(Boolean)) {
+      const corners = [[rm.x + .45, rm.z + .45], [rm.x + rm.w - .45, rm.z + .45], [rm.x + .45, rm.z + rm.d - .45], [rm.x + rm.w - .45, rm.z + rm.d - .45]];
+      const [px, pz] = corners.sort((p, q) => Math.hypot(p[0] - cx, p[1] - cz) - Math.hypot(q[0] - cx, q[1] - cz))[0];
+      const tx = rm.x + rm.w - (px - rm.x), tz = rm.z + rm.d - (pz - rm.z), eye = Math.min(1.55, f.height - .25);
+      inside.push({ name: `inne-${rm.name.toLowerCase().replace(/æ/g, 'ae').replace(/ø/g, 'o').replace(/å/g, 'a').replace(/[^a-z0-9]+/g, '-')}`, walk: { x: px, y: y + eye, z: pz, yaw: Math.atan2(-(tx - px), -(tz - pz)), pitch: -.08 } });
+    }
+    y += f.height;
+  });
+  return [...list, ...inside];
+}
+
+window.husform = {
+  async load(raw) {
+    const house = normalize(raw);
+    view.setWalk(null); view.build(house); view.frame(); await frames(3);
+    shots = plan(house);
+    return shots.map(s => s.name);
+  },
+  async shot(i) {
+    const s = shots[i], c = view.camera;
+    if (s.walk) view.setWalk(s.walk);
+    else {
+      view.setWalk(null); await frames(2);
+      c.fov = 50; c.updateProjectionMatrix();
+      view.controls.target.set(...s.at); c.position.set(...s.pos); c.lookAt(...s.at); view.controls.update();
+    }
+    view.invalidate(); await frames(4);
+  },
+};
+window.husformReady = true;
+</script>
+</body>
+</html>
