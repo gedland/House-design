@@ -40,6 +40,7 @@ Sjekk etterpå at `https://<adressen>/healthz` svarer med `"ai":true`. Med `"ai"
 - `js/scene.js`: JSON → Three.js.
 - `textures/`: PBR-teksturer fra [Poly Haven](https://polyhaven.com) (CC0), 1k webp. `textures/lag.py` laster dem ned og lager dem på nytt (Python med numpy og Pillow).
 - `js/app.js`: grensesnitt, redigering, lagring, eksport.
+- `modeller/`: ferdige hus i JSON-skjemaet, som kan åpnes med «Mer» → «Importer JSON». `haukeberget-17.json` er tolket fra planløsningene (U.etg og 1.etg) og bildene av huset.
 - `server.js`: statiske filer og `POST /api/analyze`. Svaret strømmes som linjer med JSON (fremdrift, så huset eller en feil).
 
 Ved endringer i filene: øk `VERSION` i `service-worker.js`.
