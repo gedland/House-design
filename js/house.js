@@ -140,7 +140,7 @@ export function normalize(h) {
   const id = (o, p) => { const v = typeof o.id === 'string' && o.id && !seen.has(o.id) ? o.id : uid(p); seen.add(v); return v; };
   const n = (v, d, min = -500, max = 500) => Math.min(max, Math.max(min, v !== null && v !== '' && isFinite(+v) ? round(+v) : d));
   const col = (c, d) => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : d, mt = (v, d, c) => material(v, c, d), arr = a => Array.isArray(a) ? a : [];
-  const floors = arr(h?.floors).slice(0, 5).map(adapt).map((f, i) => ({
+  const floors = arr(h?.floors).slice(0, 20).map(adapt).map((f, i) => ({
     id: id(f, 'f'), name: String(f.name || `${i + 1}. etasje`).slice(0, 40), height: n(f.height, 2.4, 1, 6),
     rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'eik', r.color), color: col(r.color, '#c8a57a') })),
     walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), exterior: typeof w.exterior === 'boolean' ? w.exterior : +w.thickness >= .15, material: mt(w.material, 'maling', w.color), color: col(w.color, P),
