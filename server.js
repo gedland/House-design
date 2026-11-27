@@ -48,7 +48,8 @@ const SCHEMA = obj({
     floors_and_roof: say('Antall etasjer, etasjehøyder, takform og takvinkel, med begrunnelse'),
     rooms: say('Rommene i hver etasje, hvor de ligger i forhold til fasadene, og hva plasseringen bygger på'),
     openings: say('Dører og vinduer per fasade (forside, bakside, venstre, høyre) og viktige innerdører'),
-    guesses: say('Det som ikke synes i bildene og derfor er anslått. Kort, på vanlig norsk, til eieren av huset'),
+    missing: say('Det bildene ikke viser: fasader (forside, bakside, venstre, høyre), taket og rom som ikke er fotografert. Ett kort navn per punkt, f.eks. «Baksiden» eller «Badet». Tom liste hvis alt er fotografert', list(T)),
+    guesses: say('Ett punkt per ting som er anslått uten å synes i bildene: hva du anslo, og hva anslaget bygger på. Kort, på vanlig norsk, til eieren av huset', list(T)),
   }),
   house: obj({
     name: T,
@@ -64,7 +65,7 @@ const SCHEMA = obj({
     roof: obj({ type: one(['gable', 'hip', 'flat']), pitch: N, overhang: N, material: MAT, color: COLOR }),
   }),
 });
-const PROMPT = `Du får bilder av ett og samme hus, tatt ute og inne, merket «Bilde 1», «Bilde 2» osv. Lag en forenklet 3D-modell av huset som ett JSON-objekt. Eieren åpner modellen i en editor og retter detaljer etterpå. Det som teller, er at modellen ligner huset: riktig grunnform og størrelse, riktig antall etasjer, riktig takform, dører og vinduer på riktig fasade og omtrent riktig sted, og riktige farger. Huset skal alltid være helt og lukket, også der bildene ikke viser alt.
+const PROMPT = `Du får ett eller flere bilder av ett og samme hus, tatt ute og/eller inne, merket «Bilde 1», «Bilde 2» osv. Lag en forenklet 3D-modell av huset som ett JSON-objekt. Eieren åpner modellen i en editor og retter detaljer etterpå. Det som teller, er at modellen ligner huset: riktig grunnform og størrelse, riktig antall etasjer, riktig takform, dører og vinduer på riktig fasade og omtrent riktig sted, og riktige farger. Huset skal alltid være helt og lukket, også der bildene ikke viser alt. Ofte mangler bilder av noen sider, taket eller rommene, og noen ganger finnes det bare ett bilde. Det som mangler, anslår du, og du sier tydelig fra om hva du har anslått.
 
 # Koordinater
 Alle mål er i meter. Se huset forfra, mot inngangsfasaden (fasaden med hoveddøren): x går mot høyre, z går mot deg, y er opp. Husets bakre venstre hjørne ligger i (0, 0), så inngangsfasaden får størst z, venstre gavl ligger ved x = 0 og baksiden ved z = 0.
@@ -72,7 +73,7 @@ Alle mål er i meter. Se huset forfra, mot inngangsfasaden (fasaden med hoveddø
 # Arbeidsrekkefølge
 Arbeid i denne rekkefølgen, og skriv det du finner kort i "survey" før du fyller ut "house".
 
-1. Bildene. Gå gjennom hvert bilde: er det tatt ute eller inne, og hva viser det? Finn inngangsfasaden og bestem hvilke bilder som viser venstre side, høyre side og baksiden. Inne: hvilket rom, og mot hvilken fasade ser kameraet?
+1. Bildene. Gå gjennom hvert bilde: er det tatt ute eller inne, og hva viser det? Finn inngangsfasaden og bestem hvilke bilder som viser venstre side, høyre side og baksiden. Inne: hvilket rom, og mot hvilken fasade ser kameraet? Skriv i survey.missing hvilke fasader, tak og rom ingen bilder viser.
 2. Ytre form og grunnflate, fra utebildene. Er grunnflaten rektangulær, L-formet eller noe annet? Anslå lengde og bredde ut fra kjente størrelser (se Mål). Sjekk at fasadene stemmer med hverandre: forsiden og baksiden er like lange, og gavlene er like brede.
 3. Etasjer og tak. Tell etasjene på fasadene. En sokkel- eller kjelleretasje med vinduer over bakken er nederste etasje. En loftsetasje under skråtak, med vinduer i gavlen eller i ark, er en egen etasje med lav vegghøyde (knevegg ca. 1.0–1.6 m). Velg takformen som ligner mest, og anslå takvinkelen ut fra gavltrekanten.
 4. Rominndeling, fra innebildene. Finn ut hvilke rom som finnes og hvor de ligger. Bruk vinduene: et vindu du ser innenfra, er et av vinduene på fasadene, så rommet ligger bak den fasaden. Bruk også utsikt, lysinnfall og hvilke rom som ses gjennom døråpninger. Rom som ikke er fotografert, men som et slikt hus nesten alltid har (gang, bad, soverom, bod), legger du der det er plass.
@@ -90,7 +91,13 @@ Det finnes ingen målestokk i bildene utenom kjente ting. Regn ut fra dem, og sa
 Kontroller at målene går opp: rommene langs en fasade skal til sammen bli like lange som fasaden. En vanlig norsk enebolig er 7–14 m lang og 6–10 m bred.
 
 # Det du ikke ser
-Anslå noe vanlig for et hus av denne typen og alderen, aldri la noe mangle. Svaret skal alltid ha: lukkede yttervegger rundt hver etasje, rom som fyller hver etasje, minst én ytterdør, en dør inn til hvert rom, og tak. Skriv i survey.guesses hva du har anslått uten å se det.
+Det som mangler i bildene, skal anslås, aldri utelates. Anslå noe vanlig for et hus av denne typen, stilen og alderen, og bygg på det du faktisk ser:
+- En fasade som ikke er fotografert, får samme materiale og farge som de du ser, og vinduer med samme type og størrelse. Baksiden har ofte en dør ut til hagen; gavlene har gjerne færre vinduer.
+- Et tak som ikke synes ovenfra, anslås ut fra gavlene, takfoten og det som skimtes av taket.
+- Uten innebilder legger du en vanlig planløsning for husets størrelse og type, med rom bak vinduene der de passer (stue mot den største vindusflaten, kjøkken nær inngangen eller stua, bad og soverom mot de mindre vinduene), og vanlige gulv og møbler.
+- Med bare ett eller noen få bilder blir mye anslått. Lag likevel et helt hus.
+Svaret skal alltid ha: lukkede yttervegger rundt hver etasje, rom som fyller hver etasje, minst én ytterdør, en dør inn til hvert rom, og tak.
+Skriv hvert anslag som et eget punkt i survey.guesses: hva du anslo og hva det bygger på, for eksempel «Baksiden: ikke fotografert. Lagt to vinduer som på forsiden og en dør ut til hagen.» eller «Planløsningen i 2. etasje: ingen bilder innenfra. Tre soverom og bad, plassert etter vinduene.» Ta med alle fasader, tak og rom fra survey.missing, og mål du har måttet gjette uten noe kjent å regne ut fra.
 
 # Formatet
 - Etasjer listes nedenfra og opp. "height" er avstanden fra gulv til gulv. For øverste etasje er det vegghøyden opp til takfoten.
@@ -147,7 +154,7 @@ async function ask(Anthropic, messages, on, signal, stage) {
   return { msg, data };
 }
 // Bilder → kontrollert hus. Finner kontrollen alvorlige feil, får Claude én sjanse til å rette dem.
-// Returnerer { house, report: { fixed, problems, guesses }, survey }.
+// Returnerer { house, report: { photos, fixed, problems, missing, guesses }, survey }.
 async function analyze(images, on, signal) {
   let Anthropic;
   try { Anthropic = require('@anthropic-ai/sdk'); } catch { throw fail(500, 'Pakken @anthropic-ai/sdk mangler på serveren. Kjør npm install.'); }
@@ -160,7 +167,7 @@ async function analyze(images, on, signal) {
     return [{ type: 'text', text: `Bilde ${i + 1}:` }, { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }];
   });
   // Bildene caches, så en eventuell rette-runde slipper å lese dem på nytt.
-  content.push({ type: 'text', text: `Dette er ${images.length} bilder av huset. Lag modellen.`, cache_control: { type: 'ephemeral' } });
+  content.push({ type: 'text', text: `${images.length === 1 ? 'Dette er det eneste bildet' : `Dette er ${images.length} bilder`} av huset. Anslå det som ikke synes, og lag modellen.`, cache_control: { type: 'ephemeral' } });
   const messages = [{ role: 'user', content }];
   const check = (data, final) => {
     if (!data?.house) throw fail(502, 'Claude svarte uten noe hus. Prøv igjen.');
@@ -181,7 +188,8 @@ async function analyze(images, on, signal) {
     } catch (e) { if (signal.aborted) throw e; console.error('Husform: rette-runden feilet, bruker første svar:', e.message); }
     result = check(data, true); // siste kontroll lukker det som fortsatt er åpent, og melder det
   }
-  const report = { fixed: result.fixed, problems: result.problems.map(p => p.text), guesses: String(data.survey?.guesses || '') };
+  const lines = v => (Array.isArray(v) ? v : v ? [v] : []).map(t => String(t).trim()).filter(Boolean);
+  const report = { photos: images.length, fixed: result.fixed, problems: result.problems.map(p => p.text), missing: lines(data.survey?.missing), guesses: lines(data.survey?.guesses) };
   return { house: result.house, report, survey: data.survey };
 }
 
@@ -221,7 +229,7 @@ async function analyzeRoute(req, res) {
   try {
     const { images } = await readBody(req);
     if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Legg ANTHROPIC_API_KEY=... i filen .env og start node server.js på nytt.');
-    if (!Array.isArray(images) || images.length < 5) throw fail(400, `Velg minst 5 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
+    if (!Array.isArray(images) || !images.length) throw fail(400, 'Velg minst ett bilde av huset.');
     if (images.length > 30) throw fail(400, `Du kan sende høyst 30 bilder (fikk ${images.length}).`);
     const done = await analyze(images, on, ac.signal);
     if (started) line({ type: 'done', ...done }); else send(res, 200, done);
