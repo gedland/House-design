@@ -213,7 +213,7 @@ function addSheet() {
 // Bilder inn → 3D-modell. Bildene krympes i nettleseren (lang side 1280 px, JPEG) og sendes til serveren, som spør Claude.
 // S.photos: [{ key, name, data, thumb }]. S.prep: krymping pågår { done, total }. S.job: tolkning pågår { stage, part, chars, t0, xhr }.
 // S.server: 'ok' | 'nokey' | 'none' (ingen Husform-server svarte) | null (ikke sjekket ennå).
-const MIN = 5, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
+const MIN = 3, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
   catch { // eldre nettlesere og formater createImageBitmap ikke tar: prøv vanlig <img>
