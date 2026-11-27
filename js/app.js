@@ -7,7 +7,7 @@ const btn = (textContent, onclick, p = {}) => h('button', { type: 'button', text
 const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
-const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, report: null, note: '' };
+const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, access: null, report: null, note: '', preview: null, lost: 0 };
 let view;
 try { view = createView($('#view')); }
 catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
@@ -38,7 +38,7 @@ const same = (a, b) => a === b || (!!a && !!b && typeof a === 'object' && typeof
 // Alle endringer går gjennom edit(): JSON endres, 3D tegnes på nytt. commit() lagrer og legger et angre-steg.
 let drawT = 0;
 const shown = () => S.walk ? null : S.floor;
-function draw() { if (drawT) return; drawT = requestAnimationFrame(() => { drawT = 0; view.build(S.house, { floor: shown() }); view.select(S.sel); }); }
+function draw() { if (drawT) return; drawT = requestAnimationFrame(() => { drawT = 0; if (S.preview) return view.build(S.preview, { floor: null }); view.build(S.house, { floor: shown() }); view.select(S.sel); }); }
 function edit(fn, done = true) { S.pending ??= JSON.stringify(S.house); fn(); draw(); if (done) commit(); else save(); }
 // Mens et felt skrives i eller et objekt dras, regnes hver endring fra huset slik det var før, så mellomtrinn ikke setter spor.
 function restore() { if (S.pending) S.house = JSON.parse(S.pending); }
@@ -52,13 +52,13 @@ function commit() {
     save(true);
     if (!same(raw, S.house)) { draw(); ui(); }
   }
-  $('#undo').disabled = !S.undo.length;
+  $('#undo').disabled = !S.undo.length || !!S.preview;
 }
-// Bytter ut hele huset. Det gamle huset blir et angre-steg.
-function replace(house) {
+// Bytter ut hele huset. Det gamle huset blir et angre-steg. intro = kameraet flyr inn fra avstand.
+function replace(house, intro = true) {
   S.undo.push(S.pending || JSON.stringify(S.house)); if (S.undo.length > 50) S.undo.shift();
   S.house = house; S.sel = null; S.move = false; S.floor = null; S.sheet = null; S.pending = null; S.placing = null; S.note = '';
-  $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(false, { intro: true }); ui(); save(true);
+  $('#undo').disabled = false; if (S.walk) leave(); view.build(S.house, { floor: null }); view.frame(false, { intro }); ui(); save(true);
 }
 function select(id) {
   commit();
@@ -213,7 +213,9 @@ function addSheet() {
 // Bilder inn → 3D-modell. Bildene krympes i nettleseren (lang side 1280 px, JPEG) og sendes til serveren, som spør Claude.
 // S.photos: [{ key, name, data, thumb }]. S.prep: krymping pågår { done, total }. S.job: tolkning pågår { stage, part, chars, t0, xhr }.
 // S.server: 'ok' | 'nokey' | 'none' (ingen Husform-server svarte) | null (ikke sjekket ennå).
-const MIN = 5, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
+// S.preview: huset så langt mens Claude skriver det. S.lost: antall bilder i en tolkning som stoppet fordi siden ble lukket.
+// S.access: vernet på serveren { left (hus igjen i dag), reason, error }. reason: 'code' (spør om tilgangskoden), 'locked', 'quota', 'full' eller null.
+const MIN = 1, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
   catch { // eldre nettlesere og formater createImageBitmap ikke tar: prøv vanlig <img>
@@ -265,61 +267,126 @@ async function addPhotos(files) {
   ui();
 }
 function removePhoto(i) { S.photos.splice(i, 1); S.note = ''; ui(); }
+// Tilgangskoden (ACCESS_CODE på serveren) huskes i localStorage, og i minnet hvis localStorage ikke virker.
+let accessCode = (() => { try { return localStorage.husformCode || ''; } catch { return ''; } })();
+function setCode(c) { accessCode = c; try { if (c) localStorage.husformCode = c; else localStorage.removeItem('husformCode'); } catch {} }
+const codeHeader = () => accessCode ? { 'X-Access-Code': encodeURIComponent(accessCode) } : {};
 async function checkServer() {
+  const sent = accessCode;
   try {
-    const r = await fetch('api/status', { cache: 'no-store' }), j = await r.json();
+    const r = await fetch('api/status', { cache: 'no-store', headers: codeHeader() }), j = await r.json();
     S.server = j.ai ? 'ok' : 'nokey';
+    if (j.reason === 'code' && sent && accessCode === sent) setCode(''); // feil kode: spør på nytt
+    S.access = { left: j.left, reason: j.reason || null, error: j.reason === 'code' && !sent ? '' : j.error || '' };
   } catch { S.server = 'none'; }
   if (S.sheet === 'photos') ui();
 }
-
-// Fremdrift: sending (0–15 %), Claude ser på bildene (15–50 %, etter tid), Claude skriver modellen (50–80 %, etter mengde tekst),
-// kontroll, og eventuelt en rette-runde der Claude retter feil kontrollen fant (82–97 %).
-const STAGES = {
-  send: 'Sender bildene til serveren', wait: 'Venter på Claude', look: 'Claude ser på bildene og finner ut hvordan huset henger sammen',
-  write: 'Claude skriver ned modellen', check: 'Kontrollerer modellen', fix: 'Claude retter feil som kontrollen fant', draw: 'Tegner modellen',
-};
-const ease = (x, k) => 1 - Math.exp(-x / k);
-function jobState() {
-  const j = S.job, secs = (Date.now() - j.t0) / 1000;
-  const pct = { send: 15 * j.part, wait: 15, look: 15 + 35 * ease(secs - j.t1, 90), write: 50 + 30 * ease(j.chars, 20000), check: 82,
-    fix: 82 + 15 * ease(j.chars, 20000) }[j.stage] ?? 99;
-  const time = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
-  const extra = j.stage === 'send' ? `${Math.round(j.part * 100)} %` : /write|fix/.test(j.stage) && j.chars >= 1000 ? `${Math.round(j.chars / 1000)} kB` : '';
-  return { pct, text: `${STAGES[j.stage]} …${extra ? ` ${extra}` : ''}`, time };
+function codeForm() {
+  const input = h('input', { type: 'text', value: accessCode, autocomplete: 'off', autocapitalize: 'none', spellcheck: false, required: true, maxLength: 200 });
+  const go = h('button', { type: 'submit', className: 'primary wide', textContent: 'Fortsett' });
+  const form = h('form', { className: 'fields', onsubmit: async e => {
+    e.preventDefault(); const v = input.value.trim(); if (!v) return input.focus();
+    setCode(v); go.disabled = true; go.textContent = 'Sjekker koden …'; await checkServer();
+  } }, h('label', { className: 'wide' }, h('span', { textContent: 'Tilgangskode' }), input), go);
+  setTimeout(() => form.isConnected && !matchMedia('(pointer: coarse)').matches && input.focus());
+  return [h('p', { className: 'hint', textContent: 'Denne Husform-serveren krever en tilgangskode før du laster opp bilder. Du får den av den som delte lenken. Koden huskes på denne enheten.' }),
+    S.access.error && h('p', { className: 'note', role: 'alert', textContent: S.access.error }), form];
 }
+
+// Fremdrift i fire trinn: sender, tolker, skriver modell, kontrollerer. Serverens stage hører til hvert sitt trinn.
+// Tiden igjen anslås ut fra opplastingsfarten, hvor fort Claude skriver nå, og hvor lang tid de forrige tolkningene i
+// denne nettleseren tok (husformTimes i localStorage). Uten tidligere tolkninger brukes vanlige verdier.
+const STEPS = ['Sender', 'Tolker', 'Skriver modell', 'Kontrollerer'];
+const STEP_OF = { send: 0, wait: 0, look: 1, write: 2, check: 3, fix: 3, draw: 3 };
+const STAGES = {
+  send: 'Sender bildene til serveren', wait: 'Sender bildene videre til Claude', look: 'Claude ser på bildene og finner ut hvordan huset henger sammen',
+  write: 'Claude skriver ned modellen, rom for rom', check: 'Kontrollerer at vegger, rom og åpninger går opp', fix: 'Claude retter feil som kontrollen fant', draw: 'Tegner modellen',
+};
+const learned = () => { try { return JSON.parse(localStorage.husformTimes) || {}; } catch { return {}; } };
+function learn(j) {
+  const L = learned(), a = j.at, mix = (o, v) => !(v > 0 && isFinite(v)) ? o : o ? o * .5 + v * .5 : v, write = a.check - a.write;
+  try { localStorage.husformTimes = JSON.stringify({ n: mix(L.n, j.n), look: mix(L.look, a.write - a.look), chars: mix(L.chars, j.houseChars), rate: write > 5 ? mix(L.rate, j.houseChars / write) : L.rate }); } catch {}
+}
+// { step, frac (andel av trinnet som er gjort), left (sekunder igjen totalt), slow (trinnet tar lenger enn anslått) }
+function estimate(j, now) {
+  const L = learned(), at = j.at, since = st => now - (at[st] ?? now);
+  const look = L.look ? L.look * Math.sqrt(j.n / (L.n || j.n)) : 30 + 4 * j.n;
+  const live = j.stage === 'write' && j.chars > 800 && since('write') > 4 ? j.chars / since('write') : 0, k = Math.min(1, j.chars / 4000);
+  const rate = live ? (L.rate || 150) * (1 - k) + live * k : L.rate || 150;
+  const chars = Math.max(L.chars || 15000, j.stage === 'write' ? j.chars * 1.1 : j.houseChars), write = chars / rate;
+  const fixChars = (j.surveyChars + j.houseChars) || chars * 1.25;
+  const up = j.part > .05 && since('send') > 1 ? since('send') / j.part * (1 - j.part) : j.bytes * (1 - j.part) / 400e3;
+  const [cur, after, frac] = {
+    send: [up, 3 + look + write + 2, j.part * .9],
+    wait: [3 - since('wait'), look + write + 2, .95],
+    look: [look - since('look'), write + 2, since('look') / look],
+    write: [(chars - j.chars) / rate, 2, j.chars / chars],
+    check: [2 - since('check'), 0, .3],
+    fix: [j.chars ? (fixChars - j.chars) / rate : 20 - since('fix') + fixChars / rate, 0, .3 + .65 * Math.min(1, j.chars / fixChars)],
+    draw: [1, 0, .95],
+  }[j.stage];
+  return { step: STEP_OF[j.stage], frac: Math.max(0, Math.min(.97, frac)), left: Math.max(0, cur) + after, slow: cur < -5 && j.stage !== 'check' };
+}
+const leftText = s => s < 20 ? 'snart ferdig' : s < 50 ? 'under ett minutt igjen' : s < 90 ? 'ca. 1 minutt igjen' : `ca. ${Math.round(s / 60)} minutter igjen`;
+function jobState() {
+  const j = S.job, secs = (Date.now() - j.t0) / 1000, e = estimate(j, secs);
+  j.left = j.left == null ? e.left : j.left + (e.left - j.left) * .3; // jevner ut så anslaget ikke hopper
+  j.pct = Math.max(j.pct || 0, Math.min(99, 100 * secs / (secs + j.left + 1)));
+  const time = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+  const extra = j.stage === 'send' ? ` ${Math.round(j.part * 100)} %` : /write|fix/.test(j.stage) && j.chars >= 1000 ? ` (${Math.round(j.chars / 1000)} kB)` : '';
+  const left = e.slow ? `tar litt lenger enn vanlig, ${leftText(j.left)}` : leftText(j.left);
+  return { ...e, left, text: `${STAGES[j.stage]} …${extra}`, time };
+}
+const previewText = () => {
+  const p = S.preview; if (!p) return '';
+  const rooms = p.floors.reduce((s, f) => s + f.rooms.length, 0);
+  return `Forhåndsvisning: ${p.floors.length} ${p.floors.length > 1 ? 'etasjer' : 'etasje'} og ${rooms} rom så langt${p.roof ? ', med tak' : ''}. Mål, farger og møbler kan endre seg til modellen er ferdig.`;
+};
 // Oppdaterer fremdriften der den vises (arket eller banneret), uten å tegne resten av grensesnittet på nytt.
 function showJob() {
   if (!S.job) return;
-  const { pct, text, time } = jobState();
+  const s = jobState();
   for (const el of document.querySelectorAll('.job')) {
-    el.querySelector('.bar i').style.width = `${pct.toFixed(1)}%`;
-    el.querySelector('.bar').ariaValueNow = Math.round(pct);
-    el.querySelector('.job-text').textContent = text;
-    const t = el.querySelector('.job-time'); if (t) t.textContent = `Tid brukt: ${time}. Det tar vanligvis 1–4 minutter.`;
+    const bar = el.querySelector('.steps');
+    bar.ariaValueNow = Math.round(S.job.pct); bar.ariaValueText = `Trinn ${s.step + 1} av ${STEPS.length}: ${STEPS[s.step]}, ${s.left}`;
+    bar.querySelectorAll('li').forEach((li, i) => {
+      li.className = i < s.step ? 'done' : i === s.step ? 'now' : '';
+      li.style.setProperty('--p', `${i < s.step ? 100 : i === s.step ? (s.frac * 100).toFixed(1) : 0}%`);
+    });
+    const small = el.classList.contains('small');
+    el.querySelector('.job-text').textContent = small ? `${STEPS[s.step]} · ${s.left}` : s.text;
+    const t = el.querySelector('.job-time'); if (t) t.textContent = `${s.time} brukt · ${s.left}`;
+    const p = el.querySelector('.job-preview'); if (p) { p.textContent = previewText(); p.hidden = !S.preview; }
   }
 }
 const jobView = (small) => h('div', { className: 'job' + (small ? ' small' : '') },
-  h('p', { className: 'job-text', role: 'status' }),
-  h('div', { className: 'bar', role: 'progressbar', ariaLabel: 'Fremdrift', ariaValueMin: 0, ariaValueMax: 100 }, h('i')),
-  !small && h('p', { className: 'job-time hint' }));
+  h('ol', { className: 'steps', role: 'progressbar', ariaLabel: 'Fremdrift', ariaValueMin: 0, ariaValueMax: 100 },
+    STEPS.map(label => h('li', {}, h('i'), !small && h('span', { textContent: label })))),
+  h('p', { className: 'job-text' }),
+  !small && [h('p', { className: 'job-time hint' }), h('p', { className: 'job-preview hint', hidden: true }),
+    h('p', { className: 'hint', textContent: 'Hold siden åpen og skjermen på til modellen er ferdig. Lukker du fanen, stopper tolkningen, og du må laste opp bildene på nytt.' })]);
 
 const failed = msg => Object.assign(new Error(msg), { shown: true });
 function httpError(status, j) {
-  if (j?.error) return failed(j.error);
+  if (j?.error) return Object.assign(failed(j.error), { reason: j.reason });
   if (status === 404 || status === 405) return failed('Fant ikke bildetolkningen på serveren. Appen ser ut til å kjøre uten Husform-serveren (f.eks. som statiske filer). Start den med node server.js.');
   if (status === 413) return failed('Bildene er for store til sammen. Bruk færre bilder.');
   if (status >= 502 && status <= 504) return failed(`Serveren svarte ikke (feil ${status}). Sjekk at node server.js kjører, og prøv igjen.`);
   return failed(`Serveren svarte med feil ${status}. Prøv igjen.`);
 }
 // Sender bildene med XMLHttpRequest, som gir fremdrift både for opplastingen og for svaret serveren strømmer tilbake.
-function post(images) {
+// onPreview(house) får huset slik Claude har skrevet det så langt.
+function post(images, onPreview) {
   return new Promise((ok, no) => {
     const x = new XMLHttpRequest(); S.job.xhr = x;
     let seen = 0, done = null, error = null;
     const stage = (st, o = {}) => {
-      if (st !== S.job.stage) { if (st === 'look') S.job.t1 = (Date.now() - S.job.t0) / 1000; S.job.chars = 0; }
-      Object.assign(S.job, { stage: st }, o); showJob();
+      const j = S.job;
+      if (st !== j.stage) {
+        if (j.stage === 'look') j.surveyChars = j.chars; else if (j.stage === 'write') j.houseChars = j.chars;
+        j.at[st] ??= (Date.now() - j.t0) / 1000; j.chars = 0;
+      }
+      Object.assign(j, { stage: st }, o); showJob();
     };
     const read = () => {
       if (!x.getResponseHeader('Content-Type')?.includes('ndjson')) return;
@@ -327,11 +394,13 @@ function post(images) {
       while ((i = t.indexOf('\n', seen)) >= 0) {
         let m; try { m = JSON.parse(t.slice(seen, i)); } catch { m = null; } seen = i + 1;
         if (m?.type === 'progress') stage(m.stage, m.chars != null ? { chars: m.chars } : {});
+        else if (m?.type === 'preview') onPreview(m.house);
         else if (m?.type === 'done') done = m;
         else if (m?.type === 'error') error = m.error;
       }
     };
-    x.open('POST', 'api/analyze'); x.setRequestHeader('Content-Type', 'application/json'); x.timeout = 15 * 60e3;
+    x.open('POST', 'api/analyze'); x.setRequestHeader('Content-Type', 'application/json');
+    for (const [k, v] of Object.entries(codeHeader())) x.setRequestHeader(k, v); x.timeout = 15 * 60e3;
     x.upload.onprogress = e => e.lengthComputable && stage('send', { part: e.loaded / e.total });
     x.upload.onload = () => stage('wait');
     x.onprogress = read;
@@ -349,57 +418,97 @@ function post(images) {
     x.send(JSON.stringify({ images }));
   });
 }
+// Forhåndsvisningen er bare til å se på: den tegnes i stedet for S.house, men lagres ikke og kan ikke velges eller endres.
+// Kameraet rammer inn huset når grunnflaten kommer, og på nytt når det kommer flere etasjer eller tak.
+function showPreview(raw) {
+  let p; try { p = normalize(raw); } catch { return; }
+  const first = !S.preview; S.preview = p;
+  if (first) { if (S.walk) leave(); if (S.sheet !== 'photos') S.sheet = null; S.sel = null; S.move = false; S.placing = null; S.floor = null; S.previewSize = 0; }
+  view.build(p, { floor: null });
+  // Størrelsen er diagonalen av grunnflaten og høyden av etasjene som har vegger (pluss taket).
+  const b = p.floors.map(bounds).filter(Boolean), size = b.length && Math.hypot(Math.max(...b.map(x => x.x1)) - Math.min(...b.map(x => x.x0)),
+    Math.max(...b.map(x => x.z1)) - Math.min(...b.map(x => x.z0)), p.floors.reduce((s, f) => s + (f.walls.length ? f.height : 0), 0) + (p.roof ? 2 : 0));
+  if (first || size > S.previewSize * 1.12) { S.previewSize = size; view.frame(false, { intro: first }); }
+  if (first) ui(); else { caption(); showJob(); }
+}
+function endPreview() { if (!S.preview) return; S.preview = null; view.build(S.house, { floor: shown() }); view.frame(); }
+// Varsler ved neste start hvis siden lukkes mens tolkningen pågår, for bildene lagres ikke underveis.
+const JOB_KEY = 'husformJob';
+addEventListener('beforeunload', e => { if (S.job) { e.preventDefault(); e.returnValue = ''; } });
 async function analyze() {
   if (S.job || S.photos.length < MIN) return;
-  S.job = { stage: 'send', part: 0, chars: 0, t0: Date.now(), t1: 0 }; S.note = ''; ui(); showJob(); $('#panel').scrollTop = 0;
+  const images = S.photos.map(p => p.data);
+  S.job = { stage: 'send', part: 0, chars: 0, surveyChars: 0, houseChars: 0, n: images.length, bytes: images.reduce((s, d) => s + d.length, 0), t0: Date.now(), at: { send: 0 } };
+  S.note = ''; S.lost = 0; ui(); showJob(); $('#panel').scrollTop = 0;
+  try { localStorage[JOB_KEY] = JSON.stringify({ t: Date.now(), n: images.length }); } catch {}
   const timer = setInterval(showJob, 1000);
   const lock = await navigator.wakeLock?.request('screen').catch(() => null); // hindrer at mobilen sovner og bryter forbindelsen
   try {
-    const res = await post(S.photos.map(p => p.data));
-    S.job.stage = 'draw'; showJob();
+    const res = await post(images, showPreview);
+    S.job.at.draw = (Date.now() - S.job.t0) / 1000; S.job.stage = 'draw'; showJob();
     let house;
     try { house = normalize(res.house); } catch (e) { throw failed(`Claude svarte, men modellen kunne ikke brukes: ${e.message} Prøv igjen.`); }
-    S.photos = []; S.job = null; replace(house);
-    S.report = res.report || { fixed: [], problems: [], guesses: '' }; sheet('report');
+    learn(S.job);
+    const seen = !!S.preview; S.preview = null; S.photos = []; S.job = null; replace(house, !seen);
+    S.report = res.report || {}; sheet('report');
+    checkServer(); // antall hus igjen i dag
   } catch (e) {
-    S.job = null;
+    S.job = null; endPreview();
     if (!e.shown && !e.aborted) console.error(e);
-    say(e.aborted ? 'Tolkningen ble avbrutt. Bildene er fortsatt valgt.' : e.shown ? e.message : `Noe gikk galt: ${e.message}`);
-  } finally { clearInterval(timer); lock?.release().catch(() => {}); }
+    // Tilgangskode eller grense: arket viser meldingen i stedet for opplastingen. Bildene er fortsatt valgt.
+    if (e.reason) { if (e.reason === 'code') setCode(''); S.access = { ...S.access, left: 0, reason: e.reason, error: e.message }; S.note = ''; ui(); }
+    else { say(e.aborted ? 'Tolkningen ble avbrutt. Bildene er fortsatt valgt.' : e.shown ? e.message : `Noe gikk galt: ${e.message}`); checkServer(); }
+  } finally { clearInterval(timer); lock?.release().catch(() => {}); try { localStorage.removeItem(JOB_KEY); } catch {} }
 }
 function cancelJob() { S.job?.xhr?.abort(); }
 // Etter tolkningen: hva kontrollen rettet, hva som bør sjekkes, og hva Claude anslo uten å se det.
+// Det anslåtte står først, i en egen boks: det er det eieren mest sannsynlig må rette.
 function reportSheet() {
-  const { fixed = [], problems = [], guesses = '' } = S.report || {}, items = l => h('ul', {}, l.map(t => h('li', { textContent: t })));
+  const r = S.report || {}, lines = v => (Array.isArray(v) ? v : v ? [v] : []).map(String).filter(t => t.trim());
+  const fixed = lines(r.fixed), problems = lines(r.problems), missing = lines(r.missing), guesses = lines(r.guesses), n = +r.photos || 0;
+  const items = l => h('ul', {}, l.map(t => h('li', { textContent: t })));
+  const few = n > 0 && n < 4 ? `Modellen bygger på ${n === 1 ? 'ett bilde' : `bare ${n} bilder`}, så mye er anslått. ` : '';
   return [head(S.house.name, 'Modellen er klar', () => sheet(null)),
-    h('p', { className: 'hint', textContent: 'Målene er anslag. Trykk på en vegg, et rom, et vindu eller et møbel for å rette det.' }),
+    h('p', { className: 'hint', textContent: `${few}Alle mål er anslag. Trykk på en vegg, et rom, et vindu eller et møbel for å rette det.` }),
     h('div', { className: 'report' },
+      (missing.length || guesses.length) ? h('section', { className: 'guessed' },
+        h('h3', { textContent: 'Anslått – synes ikke i bildene' }),
+        missing.length > 0 && h('p', { className: 'missing', textContent: `Ikke fotografert: ${missing.map((t, i) => i ? t[0].toLowerCase() + t.slice(1) : t).join(', ')}.` }),
+        guesses.length > 0 && items(guesses))
+        : h('p', { textContent: 'Claude meldte ingen deler som måtte anslås uten bilde. Målene er likevel anslag.' }),
       problems.length ? [h('h3', { textContent: 'Bør sjekkes' }), items(problems)] : h('p', { textContent: 'Kontrollen fant ingen feil som står igjen.' }),
-      guesses && [h('h3', { textContent: 'Anslått uten å synes i bildene' }), h('p', { textContent: guesses })],
       fixed.length > 0 && h('details', {}, h('summary', { textContent: `Kontrollen rettet ${fixed.length} ting automatisk` }), items(fixed))),
     btn('Se modellen', () => sheet(null), { className: 'primary' })];
 }
 function photoSheet() {
   const n = S.photos.length, busy = !!S.job, prep = S.prep;
   const file = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: e => { const f = [...e.target.files]; e.target.value = ''; addPhotos(f); } });
-  const intro = { ok: `Velg ${MIN}–${MAX} bilder av ett hus, både ute og inne: alle sider av huset utenfra, og hvert rom innenfra. Jo flere vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.`,
+  const intro = { ok: `Velg 1–${MAX} bilder av ett hus. Ett bilde holder for en første modell: det som ikke synes, anslås, og rapporten etterpå viser hva som er anslått. Målene er anslag du kan rette.`,
     nokey: 'Serveren har ingen API-nøkkel for Claude, så bildene kan ikke tolkes. Den som driver serveren, må legge ANTHROPIC_API_KEY=... i filen .env og starte node server.js på nytt. Imens kan du prøve appen med demohuset.',
     none: 'Fant ingen Husform-server å sende bildene til. Bildetolkning krever at appen kjøres med node server.js (ikke som statiske filer) og at du er på nett. Imens kan du prøve appen med demohuset.' }[S.server] || 'Sjekker serveren …';
-  const ok = S.server === 'ok';
+  const why = S.server === 'ok' && !busy && S.access?.reason, ok = S.server === 'ok' && !why, left = S.access?.left;
   const status = ok && [
     h('div', { className: 'count' },
       h('strong', { textContent: `${n} av ${MAX} bilder valgt` }),
-      h('span', { textContent: prep ? `Krymper bilde ${Math.min(prep.done + 1, prep.total)} av ${prep.total} …` : n < MIN ? `Velg minst ${MIN - n} til` : '' })),
+      h('span', { textContent: prep ? `Krymper bilde ${Math.min(prep.done + 1, prep.total)} av ${prep.total} …` : n > 0 && n < 4 ? 'Flere bilder gir mindre gjetting' : '' })),
     S.note && h('p', { className: 'note', role: 'status', textContent: S.note })];
   const grid = ok && h('ul', { className: 'photos', ariaLabel: 'Valgte bilder' },
     S.photos.map((p, i) => h('li', {}, h('img', { src: p.thumb, alt: p.name }),
       btn('✕', () => removePhoto(i), { className: 'del', ariaLabel: `Fjern ${p.name}`, disabled: busy }))),
     n + (prep ? prep.total - prep.done : 0) < MAX && !busy && h('li', {}, file, btn(prep ? '…' : '+ Legg til', () => file.click(), { className: 'pick', disabled: !!prep })));
-  const go = ok && !busy && btn(n < MIN ? `Velg minst ${MIN} bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: n < MIN || !!prep });
+  // Sjekklisten er en påminnelse, ikke et krav: appen vet ikke hva hvert bilde viser før Claude har sett dem.
+  const tips = ok && !busy && h('div', { className: 'tips' }, h('h3', { textContent: 'Dette gir best modell' }),
+    h('ul', {}, ['Alle fasadene: forsiden, baksiden og begge sidene', 'Taket, gjerne skrått ovenfra eller fra litt avstand', 'Hvert rom innenfra, helst fra et hjørne så flere vegger synes']
+      .map(t => h('li', { textContent: t }))));
+  const go = ok && !busy && btn(n < MIN ? 'Velg minst ett bilde' : `Lag 3D-modell av ${n === 1 ? 'ett bilde' : `${n} bilder`}`, analyze, { className: 'primary', disabled: n < MIN || !!prep });
   // Mens tolkningen pågår, står fremdriften øverst så den synes uten å rulle.
-  return [head('Nytt hus', 'Fra bilder til 3D', () => sheet(null)),
-    busy ? [jobView(false), btn('Avbryt', cancelJob, { className: 'secondary' })] : h('p', { className: 'hint', textContent: intro }),
-    status, grid, go,
+  const lost = S.lost && !busy && h('p', { className: 'note', role: 'status', textContent: `Den forrige tolkningen (${S.lost === 1 ? 'ett bilde' : `${S.lost} bilder`}) stoppet fordi siden ble lukket eller lastet på nytt før modellen var ferdig. Bildene lagres ikke underveis, så du må velge dem og laste dem opp på nytt.` });
+  return [head('Nytt hus', 'Fra bilder til 3D', () => sheet(null)), lost,
+    busy ? [jobView(false), btn('Avbryt', cancelJob, { className: 'secondary' })]
+      : why === 'code' ? codeForm()
+      : why ? h('p', { className: 'note', role: 'status', textContent: S.access.error })
+      : [h('p', { className: 'hint', textContent: intro }), ok && left != null && h('p', { className: 'hint', textContent: `Du kan lage ${left} hus til i dag.` })],
+    tips, status, grid, go,
     S.server === 'none' && btn('Prøv å nå serveren igjen', () => { S.server = null; ui(); checkServer(); }, { className: 'secondary' }),
     !ok && S.server && btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })].flat();
 }
@@ -440,7 +549,7 @@ function moreSheet() {
       S.floor !== null && S.house.floors.length > 1 && btn(`Slett ${S.house.floors[S.floor].name}`, removeFloor, { className: 'danger' }),
       btn('Åpne demohuset', () => { if (confirm('Bytte ut huset med demohuset? Du kan angre etterpå.')) replace(clone(DEMO)); }))];
 }
-function sheet(name) { commit(); S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
+function sheet(name) { commit(); if (name !== 'photos') S.lost = 0; S.sheet = name; S.sel = null; S.move = false; S.placing = null; S.note = ''; draw(); ui(); }
 
 // Interiørmodus
 const inRoom = (f, x, z) => f.rooms.find(r => x >= r.x && x <= r.x + r.w && z >= r.z && z <= r.z + r.d);
@@ -495,7 +604,8 @@ function ui() {
     : [h('span', { textContent: S.placing ? (S.note || banner) : banner }), btn(S.placing ? 'Avbryt' : 'OK', () => { S.placing = null; say(''); })]));
   showJob();
   const fl = S.house.floors, chip = (label, on, fn) => btn(label, fn, { ariaPressed: String(on) });
-  $('#floors').replaceChildren(...(S.walk
+  $('#b-add').disabled = $('#b-walk').disabled = !!S.preview; $('#undo').disabled = !S.undo.length || !!S.preview;
+  $('#floors').replaceChildren(...(S.preview ? [] : S.walk
     ? [btn('Ut av huset', leave, { className: 'out' }), fl.length > 1 && btn('Opp', () => climb(1), { disabled: !fl[S.walk.floor + 1] }), fl.length > 1 && btn('Ned', () => climb(-1), { disabled: !S.walk.floor })]
     : [chip('Hele huset', S.floor === null, () => showFloor(null)), ...fl.map((x, i) => chip(x.name, S.floor === i, () => showFloor(i)))]).filter(Boolean));
   const wide = matchMedia('(min-width: 760px)').matches;
@@ -545,6 +655,12 @@ view.onFrame = placeLabels;
 const m2 = rooms => Math.round(rooms.reduce((s, r) => s + r.w * r.d, 0));
 const metres = v => v.toFixed(1).replace('.', ',');
 function caption() {
+  if (S.preview) {
+    const c = $('#caption'), fl = S.preview.floors;
+    c.children[0].textContent = 'Forhåndsvisning'; c.children[1].textContent = S.preview.name;
+    c.children[2].textContent = `${fl.length} ${fl.length === 1 ? 'etasje' : 'etasjer'} · ${fl.reduce((s, f) => s + f.rooms.length, 0)} rom så langt. Claude skriver fortsatt.`;
+    return;
+  }
   const fl = S.house.floors, all = fl.flatMap(f => f.rooms), rooms = n => `${n} rom`;
   let small, big, sub;
   if (S.walk) {
@@ -612,6 +728,7 @@ cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('touchend', e => e.cancelable && e.preventDefault(), { passive: false });
 
 $('#undo').onclick = () => {
+  if (S.preview) return;
   commit();
   const s = S.undo.pop(); if (!s) return;
   S.house = JSON.parse(s); S.pending = null; $('#undo').disabled = !S.undo.length;
@@ -642,5 +759,7 @@ db('readonly', s => s.get('house')).catch(() => null).then(saved => {
   let unsaved; try { unsaved = JSON.parse(localStorage.husformUnsaved); } catch {}
   try { if ((unsaved || saved)?.version === 1) S.house = normalize(unsaved || saved); } catch {}
   if (unsaved) save(true);
+  let job; try { job = JSON.parse(localStorage[JOB_KEY]); localStorage.removeItem(JOB_KEY); } catch {}
+  if (job && Date.now() - job.t < 864e5) { S.lost = job.n || MIN; S.sheet = 'photos'; checkServer(); }
   view.build(S.house, { floor: null }); view.frame(false, { intro: true }); ui(); window.husformReady = true;
 });

@@ -1,0 +1,537 @@
+{
+ "version": 1,
+ "name": "Teglbungalow med valmtak",
+ "floors": [
+  {
+   "name": "1. etasje",
+   "height": 2.6,
+   "rooms": [
+    {
+     "name": "Stue",
+     "x": 0,
+     "z": 0,
+     "w": 6,
+     "d": 4.5,
+     "material": "eik",
+     "color": "#c8a57a"
+    },
+    {
+     "name": "Kjøkken",
+     "x": 6,
+     "z": 0,
+     "w": 3.5,
+     "d": 4.5,
+     "material": "flis_gra",
+     "color": "#8f8e8a"
+    },
+    {
+     "name": "Soverom",
+     "x": 9.5,
+     "z": 0,
+     "w": 3.5,
+     "d": 4.5,
+     "material": "eik",
+     "color": "#c8a57a"
+    },
+    {
+     "name": "Soverom 2",
+     "x": 0,
+     "z": 4.5,
+     "w": 3.5,
+     "d": 3.5,
+     "material": "eik",
+     "color": "#c8a57a"
+    },
+    {
+     "name": "Gang",
+     "x": 3.5,
+     "z": 4.5,
+     "w": 3,
+     "d": 3.5,
+     "material": "flis_gra",
+     "color": "#77746f"
+    },
+    {
+     "name": "Bad",
+     "x": 6.5,
+     "z": 4.5,
+     "w": 2.5,
+     "d": 3.5,
+     "material": "flis_hvit",
+     "color": "#eeeeea"
+    },
+    {
+     "name": "Soverom 3",
+     "x": 9,
+     "z": 4.5,
+     "w": 4,
+     "d": 3.5,
+     "material": "eik",
+     "color": "#c8a57a"
+    }
+   ],
+   "walls": [
+    {
+     "x1": 0,
+     "z1": 8,
+     "x2": 13,
+     "z2": 8,
+     "thickness": 0.25,
+     "exterior": true,
+     "material": "tegl",
+     "color": "#9c4a34",
+     "openings": [
+      {
+       "type": "window",
+       "pos": 1.75,
+       "width": 1.4,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      },
+      {
+       "type": "door",
+       "pos": 5,
+       "width": 1,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#3b4a3f",
+       "open": 0,
+       "swing": "left"
+      },
+      {
+       "type": "window",
+       "pos": 7.75,
+       "width": 0.6,
+       "height": 0.6,
+       "sill": 1.4,
+       "material": "maling",
+       "color": "#f6f4ee"
+      },
+      {
+       "type": "window",
+       "pos": 10,
+       "width": 1.4,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      },
+      {
+       "type": "window",
+       "pos": 12,
+       "width": 1.2,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      }
+     ]
+    },
+    {
+     "x1": 13,
+     "z1": 8,
+     "x2": 13,
+     "z2": 0,
+     "thickness": 0.25,
+     "exterior": true,
+     "material": "tegl",
+     "color": "#9c4a34",
+     "openings": [
+      {
+       "type": "window",
+       "pos": 1.75,
+       "width": 1.2,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      },
+      {
+       "type": "window",
+       "pos": 6,
+       "width": 1.2,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      }
+     ]
+    },
+    {
+     "x1": 13,
+     "z1": 0,
+     "x2": 0,
+     "z2": 0,
+     "thickness": 0.25,
+     "exterior": true,
+     "material": "tegl",
+     "color": "#9c4a34",
+     "openings": [
+      {
+       "type": "window",
+       "pos": 1.75,
+       "width": 1.4,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      },
+      {
+       "type": "window",
+       "pos": 4.75,
+       "width": 1.4,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      },
+      {
+       "type": "door",
+       "pos": 6.5,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#f6f4ee",
+       "open": 0,
+       "swing": "left"
+      },
+      {
+       "type": "window",
+       "pos": 9,
+       "width": 2,
+       "height": 1.4,
+       "sill": 0.7,
+       "material": "maling",
+       "color": "#f6f4ee"
+      }
+     ]
+    },
+    {
+     "x1": 0,
+     "z1": 0,
+     "x2": 0,
+     "z2": 8,
+     "thickness": 0.25,
+     "exterior": true,
+     "material": "tegl",
+     "color": "#9c4a34",
+     "openings": [
+      {
+       "type": "window",
+       "pos": 2.25,
+       "width": 1.4,
+       "height": 1.2,
+       "sill": 0.9,
+       "material": "maling",
+       "color": "#f6f4ee"
+      }
+     ]
+    },
+    {
+     "x1": 0,
+     "z1": 4.5,
+     "x2": 13,
+     "z2": 4.5,
+     "thickness": 0.1,
+     "exterior": false,
+     "material": "maling",
+     "color": "#f1eee7",
+     "openings": [
+      {
+       "type": "door",
+       "pos": 5,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 0,
+       "swing": "left"
+      },
+      {
+       "type": "door",
+       "pos": 7.75,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 0,
+       "swing": "left"
+      },
+      {
+       "type": "door",
+       "pos": 11,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 0,
+       "swing": "left"
+      }
+     ]
+    },
+    {
+     "x1": 6,
+     "z1": 0,
+     "x2": 6,
+     "z2": 4.5,
+     "thickness": 0.1,
+     "exterior": false,
+     "material": "maling",
+     "color": "#f1eee7",
+     "openings": [
+      {
+       "type": "door",
+       "pos": 2.25,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 90,
+       "swing": "left"
+      }
+     ]
+    },
+    {
+     "x1": 9.5,
+     "z1": 0,
+     "x2": 9.5,
+     "z2": 4.5,
+     "thickness": 0.1,
+     "exterior": false,
+     "material": "maling",
+     "color": "#f1eee7",
+     "openings": []
+    },
+    {
+     "x1": 3.5,
+     "z1": 4.5,
+     "x2": 3.5,
+     "z2": 8,
+     "thickness": 0.1,
+     "exterior": false,
+     "material": "maling",
+     "color": "#f1eee7",
+     "openings": [
+      {
+       "type": "door",
+       "pos": 1.75,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 0,
+       "swing": "left"
+      }
+     ]
+    },
+    {
+     "x1": 6.5,
+     "z1": 4.5,
+     "x2": 6.5,
+     "z2": 8,
+     "thickness": 0.1,
+     "exterior": false,
+     "material": "maling",
+     "color": "#f1eee7",
+     "openings": [
+      {
+       "type": "door",
+       "pos": 1.75,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 0,
+       "swing": "left"
+      }
+     ]
+    },
+    {
+     "x1": 9,
+     "z1": 4.5,
+     "x2": 9,
+     "z2": 8,
+     "thickness": 0.1,
+     "exterior": false,
+     "material": "maling",
+     "color": "#f1eee7",
+     "openings": [
+      {
+       "type": "door",
+       "pos": 1,
+       "width": 0.9,
+       "height": 2.1,
+       "sill": 0,
+       "material": "eik",
+       "color": "#efece6",
+       "open": 0,
+       "swing": "left"
+      }
+     ]
+    }
+   ],
+   "furniture": [
+    {
+     "type": "sofa",
+     "x": 3,
+     "z": 0.55,
+     "rot": 0,
+     "w": 2.4,
+     "d": 0.9,
+     "h": 0.8,
+     "material": "stoff",
+     "color": "#8a7b66"
+    },
+    {
+     "type": "bord",
+     "x": 3,
+     "z": 1.8,
+     "rot": 0,
+     "w": 1.2,
+     "d": 0.7,
+     "h": 0.45,
+     "material": "eik",
+     "color": "#b08a5e"
+    },
+    {
+     "type": "tv",
+     "x": 3,
+     "z": 4.1,
+     "rot": 180,
+     "w": 1.6,
+     "d": 0.4,
+     "h": 1.2,
+     "material": "eik",
+     "color": "#6b5a48"
+    },
+    {
+     "type": "lampe",
+     "x": 5.5,
+     "z": 0.5,
+     "rot": 0,
+     "w": 0.4,
+     "d": 0.4,
+     "h": 1.6,
+     "material": "metall",
+     "color": "#d9c9a3"
+    },
+    {
+     "type": "kjokken",
+     "x": 7.75,
+     "z": 0.36,
+     "rot": 0,
+     "w": 3.3,
+     "d": 0.6,
+     "h": 0.9,
+     "material": "maling",
+     "color": "#5f6b5a"
+    },
+    {
+     "type": "bord",
+     "x": 7.75,
+     "z": 2.8,
+     "rot": 0,
+     "w": 1.2,
+     "d": 0.8,
+     "h": 0.75,
+     "material": "eik",
+     "color": "#b08a5e"
+    },
+    {
+     "type": "stol",
+     "x": 7.75,
+     "z": 3.5,
+     "rot": 180,
+     "w": 0.5,
+     "d": 0.5,
+     "h": 0.9,
+     "material": "eik",
+     "color": "#8c6a48"
+    },
+    {
+     "type": "seng",
+     "x": 11.25,
+     "z": 1.1,
+     "rot": 0,
+     "w": 1.6,
+     "d": 2,
+     "h": 0.9,
+     "material": "stoff",
+     "color": "#c9c3b6"
+    },
+    {
+     "type": "seng",
+     "x": 1.75,
+     "z": 6.9,
+     "rot": 180,
+     "w": 1.2,
+     "d": 2,
+     "h": 0.9,
+     "material": "stoff",
+     "color": "#c9c3b6"
+    },
+    {
+     "type": "seng",
+     "x": 11,
+     "z": 6.9,
+     "rot": 180,
+     "w": 1.6,
+     "d": 2,
+     "h": 0.9,
+     "material": "stoff",
+     "color": "#c9c3b6"
+    },
+    {
+     "type": "toalett",
+     "x": 8.6,
+     "z": 7.5,
+     "rot": -90,
+     "w": 0.4,
+     "d": 0.65,
+     "h": 0.8,
+     "material": "flis_hvit",
+     "color": "#f4f2ee"
+    },
+    {
+     "type": "vask",
+     "x": 7.4,
+     "z": 4.785,
+     "rot": 0,
+     "w": 0.8,
+     "d": 0.45,
+     "h": 0.85,
+     "material": "maling",
+     "color": "#e6e1d6"
+    },
+    {
+     "type": "dusj",
+     "x": 7.01,
+     "z": 7.49,
+     "rot": 0,
+     "w": 0.9,
+     "d": 0.9,
+     "h": 2,
+     "material": "flis_hvit",
+     "color": "#dfe6e8"
+    }
+   ]
+  }
+ ],
+ "roof": {
+  "type": "hip",
+  "pitch": 25,
+  "overhang": 0.6,
+  "material": "betongtakstein",
+  "color": "#6e3b2a"
+ }
+}

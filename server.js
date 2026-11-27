@@ -1,6 +1,6 @@
 // Husform-server: serverer appen og POST /api/analyze (bilder → hus-JSON via Claude). Node 18+.
 // API-nøkkelen leses fra miljøet (hemmelighet hos verten) eller fra .env lokalt, og forlater aldri serveren. Uten nøkkel svarer /api/status {ai:false} og appen viser demohuset.
-const http = require('http'), fs = require('fs'), path = require('path');
+const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 for (const f of ['.env', '.env.local']) try {
   for (const l of fs.readFileSync(path.join(__dirname, f), 'utf8').split(/\r?\n/)) {
     const m = /^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/.exec(l);
@@ -8,7 +8,8 @@ for (const f of ['.env', '.env.local']) try {
   }
 } catch {}
 const E = process.env, KEY = E.ANTHROPIC_API_KEY || '', MODEL = E.CLAUDE_MODEL || 'claude-opus-5-5';
-const fail = (status, error) => Object.assign(new Error(error), { status });
+// reason forteller appen hva den skal gjøre med feilen: 'code' (spør om tilgangskoden), 'locked', 'quota' eller 'full' (ingen flere hus i dag).
+const fail = (status, error, reason) => Object.assign(new Error(error), { status, reason });
 
 // Skjemaet Claude må svare i: en kort befaring (survey) og huset. Huset er det samme som øverst i js/house.js, uten id-er
 // (de lages av normalize). Befaringen tvinger frem arbeidsrekkefølgen og logges, så tolkningen kan feilsøkes.
@@ -48,7 +49,8 @@ const SCHEMA = obj({
     floors_and_roof: say('Antall etasjer, etasjehøyder, takform og takvinkel, med begrunnelse'),
     rooms: say('Rommene i hver etasje, hvor de ligger i forhold til fasadene, og hva plasseringen bygger på'),
     openings: say('Dører og vinduer per fasade (forside, bakside, venstre, høyre) og viktige innerdører'),
-    guesses: say('Det som ikke synes i bildene og derfor er anslått. Kort, på vanlig norsk, til eieren av huset'),
+    missing: say('Det bildene ikke viser: fasader (forside, bakside, venstre, høyre), taket og rom som ikke er fotografert. Ett kort navn per punkt, f.eks. «Baksiden» eller «Badet». Tom liste hvis alt er fotografert', list(T)),
+    guesses: say('Ett punkt per ting som er anslått uten å synes i bildene: hva du anslo, og hva anslaget bygger på. Kort, på vanlig norsk, til eieren av huset', list(T)),
   }),
   house: obj({
     name: T,
@@ -64,7 +66,7 @@ const SCHEMA = obj({
     roof: obj({ type: one(['gable', 'hip', 'flat']), pitch: N, overhang: N, material: MAT, color: COLOR }),
   }),
 });
-const PROMPT = `Du får bilder av ett og samme hus, tatt ute og inne, merket «Bilde 1», «Bilde 2» osv. Lag en forenklet 3D-modell av huset som ett JSON-objekt. Eieren åpner modellen i en editor og retter detaljer etterpå. Det som teller, er at modellen ligner huset: riktig grunnform og størrelse, riktig antall etasjer, riktig takform, dører og vinduer på riktig fasade og omtrent riktig sted, og riktige farger. Huset skal alltid være helt og lukket, også der bildene ikke viser alt.
+const PROMPT = `Du får ett eller flere bilder av ett og samme hus, tatt ute og/eller inne, merket «Bilde 1», «Bilde 2» osv. Lag en forenklet 3D-modell av huset som ett JSON-objekt. Eieren åpner modellen i en editor og retter detaljer etterpå. Det som teller, er at modellen ligner huset: riktig grunnform og størrelse, riktig antall etasjer, riktig takform, dører og vinduer på riktig fasade og omtrent riktig sted, og riktige farger. Huset skal alltid være helt og lukket, også der bildene ikke viser alt. Ofte mangler bilder av noen sider, taket eller rommene, og noen ganger finnes det bare ett bilde. Det som mangler, anslår du, og du sier tydelig fra om hva du har anslått.
 
 # Koordinater
 Alle mål er i meter. Se huset forfra, mot inngangsfasaden (fasaden med hoveddøren): x går mot høyre, z går mot deg, y er opp. Husets bakre venstre hjørne ligger i (0, 0), så inngangsfasaden får størst z, venstre gavl ligger ved x = 0 og baksiden ved z = 0.
@@ -72,7 +74,7 @@ Alle mål er i meter. Se huset forfra, mot inngangsfasaden (fasaden med hoveddø
 # Arbeidsrekkefølge
 Arbeid i denne rekkefølgen, og skriv det du finner kort i "survey" før du fyller ut "house".
 
-1. Bildene. Gå gjennom hvert bilde: er det tatt ute eller inne, og hva viser det? Finn inngangsfasaden og bestem hvilke bilder som viser venstre side, høyre side og baksiden. Inne: hvilket rom, og mot hvilken fasade ser kameraet?
+1. Bildene. Gå gjennom hvert bilde: er det tatt ute eller inne, og hva viser det? Finn inngangsfasaden og bestem hvilke bilder som viser venstre side, høyre side og baksiden. Inne: hvilket rom, og mot hvilken fasade ser kameraet? Skriv i survey.missing hvilke fasader, tak og rom ingen bilder viser.
 2. Ytre form og grunnflate, fra utebildene. Er grunnflaten rektangulær, L-formet eller noe annet? Anslå lengde og bredde ut fra kjente størrelser (se Mål). Sjekk at fasadene stemmer med hverandre: forsiden og baksiden er like lange, og gavlene er like brede.
 3. Etasjer og tak. Tell etasjene på fasadene. En sokkel- eller kjelleretasje med vinduer over bakken er nederste etasje. En loftsetasje under skråtak, med vinduer i gavlen eller i ark, er en egen etasje med lav vegghøyde (knevegg ca. 1.0–1.6 m). Velg takformen som ligner mest, og anslå takvinkelen ut fra gavltrekanten.
 4. Rominndeling, fra innebildene. Finn ut hvilke rom som finnes og hvor de ligger. Bruk vinduene: et vindu du ser innenfra, er et av vinduene på fasadene, så rommet ligger bak den fasaden. Bruk også utsikt, lysinnfall og hvilke rom som ses gjennom døråpninger. Rom som ikke er fotografert, men som et slikt hus nesten alltid har (gang, bad, soverom, bod), legger du der det er plass.
@@ -90,7 +92,13 @@ Det finnes ingen målestokk i bildene utenom kjente ting. Regn ut fra dem, og sa
 Kontroller at målene går opp: rommene langs en fasade skal til sammen bli like lange som fasaden. En vanlig norsk enebolig er 7–14 m lang og 6–10 m bred.
 
 # Det du ikke ser
-Anslå noe vanlig for et hus av denne typen og alderen, aldri la noe mangle. Svaret skal alltid ha: lukkede yttervegger rundt hver etasje, rom som fyller hver etasje, minst én ytterdør, en dør inn til hvert rom, og tak. Skriv i survey.guesses hva du har anslått uten å se det.
+Det som mangler i bildene, skal anslås, aldri utelates. Anslå noe vanlig for et hus av denne typen, stilen og alderen, og bygg på det du faktisk ser:
+- En fasade som ikke er fotografert, får samme materiale og farge som de du ser, og vinduer med samme type og størrelse. Baksiden har ofte en dør ut til hagen; gavlene har gjerne færre vinduer.
+- Et tak som ikke synes ovenfra, anslås ut fra gavlene, takfoten og det som skimtes av taket.
+- Uten innebilder legger du en vanlig planløsning for husets størrelse og type, med rom bak vinduene der de passer (stue mot den største vindusflaten, kjøkken nær inngangen eller stua, bad og soverom mot de mindre vinduene), og vanlige gulv og møbler.
+- Med bare ett eller noen få bilder blir mye anslått. Lag likevel et helt hus.
+Svaret skal alltid ha: lukkede yttervegger rundt hver etasje, rom som fyller hver etasje, minst én ytterdør, en dør inn til hvert rom, og tak.
+Skriv hvert anslag som et eget punkt i survey.guesses: hva du anslo og hva det bygger på, for eksempel «Baksiden: ikke fotografert. Lagt to vinduer som på forsiden og en dør ut til hagen.» eller «Planløsningen i 2. etasje: ingen bilder innenfra. Tre soverom og bad, plassert etter vinduene.» Ta med alle fasader, tak og rom fra survey.missing, og mål du har måttet gjette uten noe kjent å regne ut fra.
 
 # Formatet
 - Etasjer listes nedenfra og opp. "height" er avstanden fra gulv til gulv. For øverste etasje er det vegghøyden opp til takfoten.
@@ -107,8 +115,35 @@ ${problems.map(p => `- ${p.text}`).join('\n')}
 
 Rett feilene og send hele huset på nytt i samme format, med survey oppdatert. Behold det som var riktig. Husk at ytterveggene i hver etasje skal danne én lukket ring der hver vegg begynner nøyaktig der den forrige slutter, og at rommene skal ligge innenfor ytterveggene, kant i kant uten overlapp, og fylle hele flaten.`;
 
+// Leser et JSON-svar som fortsatt strømmer inn. Gir objektet så langt, der bare ferdige objekter i lister er med:
+// et rom eller et møbel dukker opp først når det er skrevet ferdig, mens etasjer og huset rundt dem vokser underveis.
+// Trygge kuttpunkter er rett etter [ og etter ] eller } som lukker noe, og foran komma i en liste. Der lukkes resten med ] og }.
+function partialJSON() {
+  let text = '', i = 0, str = false, esc = false, cut = 0, tail = '';
+  const stack = [];
+  const mark = at => { cut = at; tail = stack.map(c => c === '{' ? '}' : ']').reverse().join(''); };
+  return {
+    push(t) {
+      text += t;
+      for (; i < text.length; i++) {
+        const c = text[i];
+        if (str) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') str = false; continue; }
+        if (c === '"') str = true;
+        else if (c === '{') stack.push(c);
+        else if (c === '[') { stack.push(c); mark(i + 1); }
+        else if (c === '}' || c === ']') { stack.pop(); mark(i + 1); }
+        else if (c === ',' && stack.at(-1) === '[') mark(i);
+      }
+    },
+    get length() { return text.length; },
+    value() { if (!cut) return null; try { return JSON.parse(text.slice(0, cut) + tail); } catch { return null; } },
+  };
+}
+
 let client;
-// Ett kall til Claude. on(progress) får { stage } når svaret begynner og { stage, chars } mens modellen skrives.
+// Ett kall til Claude. on(progress) får { stage } når svaret begynner, { stage, chars } mens det skrives
+// og { preview } (huset så langt) når grunnflaten i første etasje er skrevet. I første runde er stage 'look' mens Claude tenker
+// og skriver befaringen, og 'write' fra huset begynner; chars teller da tegnene i huset.
 async function ask(Anthropic, messages, on, signal, stage) {
   let msg;
   try {
@@ -119,10 +154,20 @@ async function ask(Anthropic, messages, on, signal, stage) {
       system: PROMPT, messages,
     });
     if (signal.aborted) stream.abort(); else signal.addEventListener('abort', () => stream.abort(), { once: true });
-    let chars = 0;
+    const json = partialJSON(); let houseAt = stage === 'write' ? -1 : 0, parsed = 0, sent = '';
     stream.on('streamEvent', ev => {
       if (ev.type === 'message_start') on({ stage: stage === 'write' ? 'look' : stage });
-      else if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') on({ stage, chars: chars += ev.delta.text.length });
+      if (ev.type !== 'content_block_delta' || ev.delta.type !== 'text_delta') return;
+      json.push(ev.delta.text);
+      // Delvis tolking koster litt, så den kjøres høyst hvert 0,6 sekund, og bare i første runde.
+      const t = Date.now();
+      if (stage === 'write' && t - parsed > 600) {
+        parsed = t; const house = json.value()?.house;
+        if (house && houseAt < 0) houseAt = json.length;
+        const f = house?.floors?.[0], s = Array.isArray(f?.rooms) && f.rooms.length && Array.isArray(f.walls) && JSON.stringify(house);
+        if (s && s !== sent) { sent = s; on({ preview: house }); }
+      }
+      on({ stage: houseAt < 0 ? 'look' : stage, chars: json.length - Math.max(0, houseAt) });
     });
     msg = await stream.finalMessage();
   } catch (e) {
@@ -147,7 +192,7 @@ async function ask(Anthropic, messages, on, signal, stage) {
   return { msg, data };
 }
 // Bilder → kontrollert hus. Finner kontrollen alvorlige feil, får Claude én sjanse til å rette dem.
-// Returnerer { house, report: { fixed, problems, guesses }, survey }.
+// Returnerer { house, report: { photos, fixed, problems, missing, guesses }, survey }.
 async function analyze(images, on, signal) {
   let Anthropic;
   try { Anthropic = require('@anthropic-ai/sdk'); } catch { throw fail(500, 'Pakken @anthropic-ai/sdk mangler på serveren. Kjør npm install.'); }
@@ -160,7 +205,7 @@ async function analyze(images, on, signal) {
     return [{ type: 'text', text: `Bilde ${i + 1}:` }, { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }];
   });
   // Bildene caches, så en eventuell rette-runde slipper å lese dem på nytt.
-  content.push({ type: 'text', text: `Dette er ${images.length} bilder av huset. Lag modellen.`, cache_control: { type: 'ephemeral' } });
+  content.push({ type: 'text', text: `${images.length === 1 ? 'Dette er det eneste bildet' : `Dette er ${images.length} bilder`} av huset. Anslå det som ikke synes, og lag modellen.`, cache_control: { type: 'ephemeral' } });
   const messages = [{ role: 'user', content }];
   const check = (data, final) => {
     if (!data?.house) throw fail(502, 'Claude svarte uten noe hus. Prøv igjen.');
@@ -181,14 +226,89 @@ async function analyze(images, on, signal) {
     } catch (e) { if (signal.aborted) throw e; console.error('Husform: rette-runden feilet, bruker første svar:', e.message); }
     result = check(data, true); // siste kontroll lukker det som fortsatt er åpent, og melder det
   }
-  const report = { fixed: result.fixed, problems: result.problems.map(p => p.text), guesses: String(data.survey?.guesses || '') };
+  const lines = v => (Array.isArray(v) ? v : v ? [v] : []).map(t => String(t).trim()).filter(Boolean);
+  const report = { photos: images.length, fixed: result.fixed, problems: result.problems.map(p => p.text), missing: lines(data.survey?.missing), guesses: lines(data.survey?.guesses) };
   return { house: result.house, report, survey: data.survey };
+}
+
+// Vern mot misbruk og kostnader, uten innlogging: hver nettverksadresse kan lage PER_IP_LIMIT hus per døgn (3), alle til sammen
+// DAILY_LIMIT (20, 0 stenger bildetolkningen), og med ACCESS_CODE satt må appen sende koden. Døgnet følger norsk tid og nullstilles ved midnatt.
+// Tellingen lagres i USAGE_FILE så en omstart ikke nullstiller den. Adressene lagres bare som hash med et salt som byttes hvert døgn.
+// Bak en mellomtjener (Render, Fly, nginx, Cloudflare) ser serveren bare mellomtjenerens adresse. Sett da TRUST_PROXY til antall
+// mellomtjenere foran serveren (vanligvis 1), så leses brukerens adresse fra X-Forwarded-For. Uten mellomtjener må den stå tom,
+// ellers kan hvem som helst late som de har en ny adresse.
+const int = (v, d) => v != null && v !== '' && isFinite(+v) ? Math.max(0, Math.floor(+v)) : d;
+const PER_IP = int(E.PER_IP_LIMIT, 3), DAILY = int(E.DAILY_LIMIT, 20), CODE = (E.ACCESS_CODE || '').trim();
+// På Render og Railway står det alltid én mellomtjener foran, så der er 1 standard.
+const HOPS = /^(true|ja|yes)$/i.test(E.TRUST_PROXY || '') ? 1 : int(E.TRUST_PROXY, E.RENDER || E.RAILWAY_PROJECT_ID ? 1 : 0), WRONG_MAX = 10;
+const USAGE_FILE = E.USAGE_FILE || path.join(__dirname, '.husform-usage.json');
+const today = () => { try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Oslo' }).format(new Date()); } catch { return new Date().toISOString().slice(0, 10); } };
+const fresh = () => ({ day: today(), salt: crypto.randomBytes(16).toString('hex'), total: 0, ips: {}, wrong: {} });
+let U = (() => { try { const u = JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8')); if (u.day === today() && u.salt && u.ips && u.wrong) return u; } catch {} return fresh(); })();
+let storeWarned = false;
+function store() {
+  try { fs.writeFileSync(USAGE_FILE + '.tmp', JSON.stringify(U)); fs.renameSync(USAGE_FILE + '.tmp', USAGE_FILE); }
+  catch (e) { if (!storeWarned) console.warn(`Husform: fikk ikke lagret tellingen i ${USAGE_FILE} (${e.message}). Den holdes bare i minnet og nullstilles ved omstart.`); storeWarned = true; }
+}
+const usage = () => { if (U.day !== today()) { U = fresh(); store(); } return U; };
+// IPv6: hele /64-blokken regnes som én adresse, siden én tilkobling vanligvis rår over hele blokken.
+function block64(ip) {
+  const [a, b] = ip.split('::'), head = a ? a.split(':') : [], tail = b ? b.split(':') : [];
+  const all = b == null ? head : [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
+  return all.slice(0, 4).map(x => (parseInt(x, 16) || 0).toString(16)).join(':') + '::/64';
+}
+let proxyWarned = false;
+function clientKey(req) {
+  let ip = req.socket.remoteAddress || '';
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (HOPS && fwd.length) ip = fwd[Math.max(0, fwd.length - HOPS)];
+  else if (fwd.length && !proxyWarned) { proxyWarned = true; console.warn('Husform: forespørslene kommer via en mellomtjener (X-Forwarded-For), men TRUST_PROXY er ikke satt. Da deler alle brukerne samme grense per adresse. Sett TRUST_PROXY=1 i .env.'); }
+  ip = ip.replace(/^::ffff:/i, '').replace(/%.*$/, '').toLowerCase();
+  if (ip.includes(':')) ip = block64(ip);
+  return crypto.createHash('sha256').update(U.salt + ip).digest('hex').slice(0, 16);
+}
+const digest = s => crypto.createHash('sha256').update(s).digest();
+// Kaster en feil hvis tilgangskoden mangler eller er feil. Feil koder telles, så koden ikke kan gjettes.
+function checkCode(req, key) {
+  if (!CODE) return;
+  const u = usage();
+  if ((u.wrong[key] || 0) >= WRONG_MAX) throw fail(429, 'For mange feil tilgangskoder fra denne nettverksadressen i dag. Prøv igjen etter midnatt.', 'locked');
+  let given = ''; try { given = decodeURIComponent(req.headers['x-access-code'] || '').trim(); } catch {}
+  if (!given) throw fail(401, 'Skriv inn tilgangskoden. Du får den av den som delte lenken.', 'code');
+  if (!crypto.timingSafeEqual(digest(given), digest(CODE))) {
+    u.wrong[key] = (u.wrong[key] || 0) + 1; store();
+    throw fail(403, 'Feil tilgangskode. Sjekk koden og prøv igjen.', 'code');
+  }
+}
+const left = key => { const u = usage(); return Math.max(0, Math.min(PER_IP - (u.ips[key] || 0), DAILY - u.total)); };
+function quotaError(key) {
+  const u = usage();
+  if (u.total >= DAILY) return fail(429, DAILY ? `Husform har laget ${DAILY} hus i dag, som er grensen for alle brukerne til sammen. Prøv igjen etter midnatt.` : 'Bildetolkning er slått av på denne serveren.', 'full');
+  if ((u.ips[key] || 0) >= PER_IP) return fail(429, `Det er laget ${PER_IP} hus fra denne nettverksadressen i dag, som er grensen. Prøv igjen etter midnatt.`, 'quota');
+}
+// Holder av et hus i tellingen før Claude spørres, så samtidige forespørsler ikke kan gå forbi grensen.
+// Returnerer en funksjon som gir huset tilbake, brukt når Claude ikke rakk å begynne på svaret.
+function reserve(key) {
+  const err = quotaError(key); if (err) throw err;
+  const u = usage(); u.total++; u.ips[key] = (u.ips[key] || 0) + 1; store();
+  console.log(`Husform: hus ${u.total} av ${DAILY} i dag.`);
+  return () => { const v = usage(); if (v !== u) return; v.total = Math.max(0, v.total - 1); v.ips[key] = Math.max(0, (v.ips[key] || 1) - 1); store(); };
+}
+// GET /api/status: { ai, code (krever tilgangskode), left (hus igjen i dag), limit, error?, reason? }. Appen sjekker her før opplasting.
+function status(req, res) {
+  const out = { ai: !!KEY, code: !!CODE, limit: PER_IP };
+  if (KEY) {
+    const key = clientKey(req);
+    out.left = left(key);
+    try { checkCode(req, key); const err = quotaError(key); if (err) throw err; } catch (e) { out.error = e.message; out.reason = e.reason; }
+  }
+  send(res, 200, out);
 }
 
 const TYPES = { html: 'text/html', css: 'text/css', js: 'text/javascript', json: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png', webp: 'image/webp' };
 // Teksturene i textures/ serveres også, ellers får modellen bare ren farge.
 const TEXTURE = /^textures\/[a-z_]+\.webp$/;
-const FILES = ['index.html', 'style.css', 'js/app.js', 'js/scene.js', 'js/house.js', 'manifest.json', 'service-worker.js', 'icon.svg', 'icon-192.png', 'icon-512.png'];
+const FILES = ['index.html', 'style.css', 'js/app.js', 'js/scene.js', 'js/house.js', 'js/surroundings.js', 'manifest.json', 'service-worker.js', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const send = (res, status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
 // Leser hele forespørselen. Er den for stor, leses resten uten å lagres, slik at nettleseren faktisk får 413-svaret.
 const LIMIT = 30e6, TOO_BIG = 'Bildene er for store til sammen. Bruk færre bilder.';
@@ -204,8 +324,9 @@ const readBody = req => new Promise((ok, no) => {
   req.on('close', () => { if (!req.complete) no(fail(499, 'Avbrutt.')); });
 });
 // POST /api/analyze. Feil før Claude har begynt å svare, får vanlig HTTP-status og { error }.
-// Etter det strømmes linjer med JSON (NDJSON): { type: 'progress', stage, chars? } og { type: 'beat' } underveis,
+// Etter det strømmes linjer med JSON (NDJSON): { type: 'progress', stage, chars? }, { type: 'preview', house } og { type: 'beat' } underveis,
 // så { type: 'done', house, report, survey } eller { type: 'error', error }. stage: look → write → check → (fix) .
+// preview er huset slik det er skrevet så langt (uten id-er, ikke normalisert), fra grunnflaten i første etasje finnes.
 async function analyzeRoute(req, res) {
   const ac = new AbortController();
   res.on('close', () => { if (!res.writableFinished) ac.abort(); });
@@ -217,27 +338,35 @@ async function analyzeRoute(req, res) {
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       beat = setInterval(() => line({ type: 'beat' }), 15000); // holder forbindelsen åpen mens Claude tenker
     }
+    if (p.preview) return line({ type: 'preview', house: p.preview });
     if (p.chars != null) { const t = Date.now(); if (t - last < 400) return; last = t; }
     line({ type: 'progress', ...p });
   };
+  let release;
   try {
     const { images } = await readBody(req);
     if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Sett ANTHROPIC_API_KEY (i .env lokalt, som hemmelighet hos verten) og start serveren på nytt.');
-    if (!Array.isArray(images) || images.length < 5) throw fail(400, `Velg minst 5 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
+    const key = clientKey(req);
+    checkCode(req, key);
+    if (!Array.isArray(images) || !images.length) throw fail(400, 'Velg minst ett bilde av huset.');
     if (images.length > 30) throw fail(400, `Du kan sende høyst 30 bilder (fikk ${images.length}).`);
+    release = reserve(key);
     const done = await analyze(images, on, ac.signal);
     if (started) line({ type: 'done', ...done }); else send(res, 200, done);
   } catch (e) {
+    // Feilet det før Claude begynte å svare, koster det (nesten) ingenting, og huset telles ikke. Avbryter brukeren, telles det,
+    // ellers kunne noen spørre Claude om og om igjen og avbryte rett før svaret.
+    if (release && !started && !ac.signal.aborted) release();
     if (!e.status) console.error(e);
     const error = e.status ? e.message : 'Uventet feil på serveren. Se loggen der serveren kjører.';
     if (ac.signal.aborted) return;
-    if (started) line({ type: 'error', error }); else send(res, e.status || 500, { error });
+    if (started) line({ type: 'error', error }); else send(res, e.status || 500, { error, reason: e.reason });
   } finally { clearInterval(beat); if (started) res.end(); }
 }
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/healthz') return send(res, 200, { ok: true, ai: !!KEY }); // helsesjekk for verten, kaller ikke Claude
-  if (url === '/api/status') return send(res, 200, { ai: !!KEY });
+  if (url === '/api/status') return status(req, res);
   if (url === '/api/analyze') return req.method === 'POST' ? analyzeRoute(req, res) : send(res, 405, { error: 'Bruk POST.' });
   const name = url === '/' ? 'index.html' : url.slice(1);
   if (!(FILES.includes(name) || TEXTURE.test(name)) || req.method !== 'GET') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Ikke funnet'); }
@@ -250,5 +379,11 @@ const server = http.createServer(async (req, res) => {
   });
 });
 // Verten setter PORT. På Render og Railway må serveren lytte på alle grensesnitt; lokalt bare på maskinen selv.
+// Startes serveren direkte (node server.js), lytter den. Importeres den, lytter den ikke: testene (test/fake-server.js)
+// låner serveren for de statiske filene og bytter ut /api/*, og eval/kjor.mjs bruker bare analyze().
 const PORT = +E.PORT || 3000, HOST = E.HOST || (E.RENDER || E.RAILWAY_PROJECT_ID ? '0.0.0.0' : '127.0.0.1');
-server.listen(PORT, HOST, () => console.log(`Husform: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+if (require.main === module) server.listen(PORT, HOST, () => {
+  console.log(`Husform: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`);
+  if (KEY) console.log(`Husform: høyst ${PER_IP} hus per nettverksadresse og ${DAILY} hus totalt per døgn, ${CODE ? 'tilgangskode kreves' : 'ingen tilgangskode (ACCESS_CODE)'}${HOPS ? `, brukerens adresse fra X-Forwarded-For (${HOPS} mellomtjener${HOPS > 1 ? 'e' : ''})` : ''}.`);
+});
+module.exports = { server, analyze, MODEL, hasKey: !!KEY };

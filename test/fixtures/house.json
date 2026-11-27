@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "Testhytta",
+  "floors": [{
+    "name": "1. etasje",
+    "height": 2.5,
+    "rooms": [
+      { "name": "Stue", "x": 0, "z": 0, "w": 6, "d": 6, "material": "eik", "color": "#c8a57a" },
+      { "name": "Soverom", "x": 6, "z": 0, "w": 4, "d": 6, "material": "furu", "color": "#dcb27a" }
+    ],
+    "walls": [
+      { "x1": 0, "z1": 6, "x2": 10, "z2": 6, "thickness": 0.2, "exterior": true, "material": "panel_hvit", "color": "#9e2b25",
+        "openings": [
+          { "type": "window", "pos": 2, "width": 1.4, "height": 1.2, "sill": 0.9, "material": "maling", "color": "#f2efe8" },
+          { "type": "door", "pos": 4.5, "width": 0.9, "height": 2.1, "sill": 0, "material": "eik", "color": "#5a3b26", "open": 0, "swing": "left" },
+          { "type": "window", "pos": 8, "width": 1.2, "height": 1.2, "sill": 0.9, "material": "maling", "color": "#f2efe8" }
+        ] },
+      { "x1": 10, "z1": 6, "x2": 10, "z2": 0, "thickness": 0.2, "exterior": true, "material": "panel_hvit", "color": "#9e2b25",
+        "openings": [{ "type": "window", "pos": 3, "width": 1.2, "height": 1.2, "sill": 0.9, "material": "maling", "color": "#f2efe8" }] },
+      { "x1": 10, "z1": 0, "x2": 0, "z2": 0, "thickness": 0.2, "exterior": true, "material": "panel_hvit", "color": "#9e2b25",
+        "openings": [{ "type": "window", "pos": 6, "width": 2.4, "height": 1.5, "sill": 0.6, "material": "maling", "color": "#f2efe8" }] },
+      { "x1": 0, "z1": 0, "x2": 0, "z2": 6, "thickness": 0.2, "exterior": true, "material": "panel_hvit", "color": "#9e2b25", "openings": [] },
+      { "x1": 6, "z1": 0, "x2": 6, "z2": 6, "thickness": 0.1, "exterior": false, "material": "maling", "color": "#f1eee7",
+        "openings": [{ "type": "door", "pos": 3, "width": 0.9, "height": 2.1, "sill": 0, "material": "eik", "color": "#efece6", "open": 45, "swing": "left" }] }
+    ],
+    "furniture": [
+      { "type": "sofa", "x": 3, "z": 4.8, "rot": 180, "w": 2.1, "d": 0.9, "h": 0.8, "material": "stoff", "color": "#7d8a80" },
+      { "type": "bord", "x": 3, "z": 3.4, "rot": 0, "w": 1.2, "d": 0.7, "h": 0.45, "material": "eik", "color": "#b08a5e" },
+      { "type": "seng", "x": 8, "z": 3, "rot": -90, "w": 1.6, "d": 2, "h": 0.9, "material": "stoff", "color": "#c9c3b6" }
+    ]
+  }],
+  "roof": { "type": "gable", "pitch": 35, "overhang": 0.4, "material": "skifer", "color": "#4b4f53" }
+}
