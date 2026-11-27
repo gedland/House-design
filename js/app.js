@@ -95,6 +95,7 @@ function setValue(f, key, v) {
   else if (f.kind === 'room' && key === 'height') { f.floor.height = v; for (const w of f.floor.walls) fitOpenings(w, v); }
   else if (f.kind === 'room' && 'xzwd'.includes(key)) reshapeRoom(f.floor, f.item, { [key]: v });
   else if (key === 'type' && f.kind === 'opening') { const { label, width, color, ...d } = OPENINGS[v]; Object.assign(f.item, d, { type: v }); } // ny type får riktig høyde, brystning og materiale
+  else if (key === 'material' && MATERIALS[v]) Object.assign(f.item, { material: v, color: MATERIALS[v].color }); // nytt materiale får sin vanlige farge, som så kan endres
   else if (key === 'type' && f.kind === 'furniture') { const { label, ...d } = FURNITURE[v]; Object.assign(f.item, d, { type: v }); }
   else f.item[key] = v;
   if (f.kind === 'opening') fitOpenings(f.wall, H);
@@ -143,7 +144,7 @@ function add(key, item, move = true) {
   item.id = uid(key[0] === 'f' ? 'm' : key[0]);
   edit(() => S.house.floors[floorIndex()][key].push(item)); inside(); select(item.id); S.move = move; ui();
 }
-const wallAt = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1, z1, x2, z2, thickness: like?.thickness ?? .2, exterior: like?.exterior ?? false, material: like?.material ?? 'panel', color: like?.color ?? '#e9e4d8', openings: [] });
+const wallAt = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1, z1, x2, z2, thickness: like?.thickness ?? .2, exterior: like?.exterior ?? false, material: like?.material ?? 'panel_hvit', color: like?.color ?? '#e9e4d8', openings: [] });
 function addFurniture(type) { const { label, ...d } = FURNITURE[type]; add('furniture', { type, ...spot(), rot: 0, ...d }); }
 function addWall() {
   const p = spot(), b = bounds(S.house.floors[floorIndex()]), x1 = Math.max(b?.x0 ?? -Infinity, p.x - 1.5), x2 = Math.max(x1 + 1, Math.min(b?.x1 ?? Infinity, p.x + 1.5));
@@ -151,14 +152,14 @@ function addWall() {
 }
 function addRoom() {
   const f = S.house.floors[floorIndex()], b = bounds(f), x = b ? b.x1 : 0, z = b ? b.z0 : 0, like = f.walls[0];
-  const room = { id: uid('r'), name: 'Nytt rom', x, z, w: 3, d: 3, material: 'tre', color: '#c8a57a' };
+  const room = { id: uid('r'), name: 'Nytt rom', x, z, w: 3, d: 3, material: 'eik', color: '#c8a57a' };
   edit(() => { f.rooms.push(room); f.walls.push(wallAt(x, z, x + 3, z, like), wallAt(x + 3, z, x + 3, z + 3, like), wallAt(x + 3, z + 3, x, z + 3, like), ...(b ? [] : [wallAt(x, z + 3, x, z, like)])); });
   inside(); select(room.id);
 }
 function addFloor() {
   const below = S.house.floors.at(-1), b = bounds(below) || { x0: 0, x1: 6, z0: 0, z1: 5 }, like = below.walls[0];
   const f = { id: uid('f'), name: `${S.house.floors.length + 1}. etasje`, height: 2.4, furniture: [],
-    rooms: [{ id: uid('r'), name: 'Rom', x: b.x0, z: b.z0, w: round(b.x1 - b.x0), d: round(b.z1 - b.z0), material: 'tre', color: '#c8a57a' }],
+    rooms: [{ id: uid('r'), name: 'Rom', x: b.x0, z: b.z0, w: round(b.x1 - b.x0), d: round(b.z1 - b.z0), material: 'eik', color: '#c8a57a' }],
     walls: [wallAt(b.x0, b.z1, b.x1, b.z1, like), wallAt(b.x1, b.z1, b.x1, b.z0, like), wallAt(b.x1, b.z0, b.x0, b.z0, like), wallAt(b.x0, b.z0, b.x0, b.z1, like)] };
   edit(() => S.house.floors.push(f)); S.floor = S.house.floors.length - 1; S.sheet = null; draw(); ui();
 }

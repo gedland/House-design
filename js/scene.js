@@ -7,28 +7,44 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MATERIALS, bounds } from './house.js';
 
-const PATTERNS = { // 256 px = 1 m, lyse mønstre som fargen ganges inn i
-  tre(x) { for (let r = 0; r < 8; r++) { x.fillStyle = `hsl(0 0% ${88 + (r * 37 % 5) * 3}%)`; x.fillRect(0, r * 32, 256, 32); line(x, 0, r * 32, 256, r * 32); const j = r * 97 % 256; line(x, j, r * 32, j, r * 32 + 32); } },
-  panel(x) { for (let c = 0; c < 8; c++) { x.fillStyle = `hsl(0 0% ${92 + (c * 53 % 4) * 2}%)`; x.fillRect(c * 32, 0, 32, 256); line(x, c * 32, 0, c * 32, 256); } },
-  flis(x) { for (let i = 0; i < 4; i++) { line(x, i * 64, 0, i * 64, 256); line(x, 0, i * 64, 256, i * 64); } },
-  murstein(x) { for (let r = 0; r < 16; r++) { line(x, 0, r * 16, 256, r * 16); for (let c = 0; c < 4; c++) { const px = c * 64 + (r % 2) * 32; line(x, px, r * 16, px, r * 16 + 16); } } },
-  takstein(x) { for (let r = 0; r < 4; r++) { line(x, 0, r * 64, 256, r * 64); for (let c = 0; c < 8; c++) { const px = c * 32 + (r % 2) * 16; line(x, px, r * 64, px, r * 64 + 64); } } },
-  betong(x) { for (let i = 0; i < 900; i++) { x.fillStyle = `rgba(0,0,0,${(i * 7919 % 10) / 120})`; x.fillRect(i * 7919 % 256, i * 104729 % 256, 2, 2); } },
-  // Svak sparkeltekstur, så malte flater ikke ser helt glatte og dataaktige ut. Så svak at fargen fortsatt stemmer.
-  maling(x) { const r = rand(7); for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(0,0,0,${.01 + r() * .03})`; x.fillRect(r() * 256, r() * 256, 1 + r() * 3, 1 + r() * 3); } },
-  tekstil(x) { const r = rand(3); for (let i = 0; i < 256; i += 3) { x.fillStyle = `rgba(0,0,0,${.03 + r() * .04})`; x.fillRect(0, i, 256, 1); x.fillRect(i, 0, 1, 256); } },
+// PBR-teksturer fra Poly Haven (CC0), 1k webp i textures/: <navn>_color (farge), _normal og _arm (R = AO, G = ruhet).
+// Fargekartet er delt på sin egen gjennomsnittsfarge, så JSON-fargen bestemmer fargen og teksturen bare gir mønster og liv.
+// [størrelse i meter, forsterkning av fargen (kartet er mørkere enn 1 i snitt), snittruhet i kartet]. Laget med en gang per
+// tekstur fra Poly Haven-originalene: eik wood_floor, furu wood_floor_worn, parkett_hvit laminate_floor_02, flis_hvit floor_tiles_08,
+// flis_gra large_floor_tiles_02, mikrosement smooth_concrete_floor, puss white_stucco_02, maling painted_plaster_wall,
+// panel_hvit white_planks_clean, panel_beiset wood_plank_wall, tegl large_red_bricks, betongtakstein roof_tiles_14,
+// skifer grey_roof_tiles_02, betong concrete_wall_008, stoff rough_linen, laer brown_leather.
+const TEXTURES = {
+  eik: [1.7, 1.517, .471], furu: [2, 2.046, .47], parkett_hvit: [1.7, 1.441, .377], flis_hvit: [1.5, 1.274, .512], flis_gra: [3, 1.842, .836],
+  mikrosement: [2, 1.458, .68], puss: [1.8, 1.193, .888], maling: [2, 1.176, .919], panel_hvit: [1.8, 1.186, .524], panel_beiset: [1, 2.042, .816],
+  tegl: [2, 3.312, .983], betongtakstein: [1.5, 2.191, .904], skifer: [1.5, 1.977, .57], betong: [2.7, 1.182, .737], stoff: [.27, 1.269, .659], laer: [.4, 2.558, .662],
 };
-// Fast tilfeldighet, så mønstrene blir like hver gang.
-const rand = s => () => (s = s * 16807 % 2147483647) / 2147483647;
-const line = (x, a, b, c, d) => { x.beginPath(); x.moveTo(a, b); x.lineTo(c, d); x.stroke(); };
-const texCache = {}, matCache = {};
-function texture(kind) {
+// Teksturene lastes først når et materiale tegnes. Til de er lastet, vises materialet i ren farge. Ikke i service-workerens forhåndslager.
+const loader = new THREE.TextureLoader(), texCache = {}, matCache = {};
+let anisotropy = 4, redraw = () => {};
+function textures(kind) {
   if (kind in texCache) return texCache[kind];
-  if (!PATTERNS[kind]) return texCache[kind] = null;
-  const c = Object.assign(document.createElement('canvas'), { width: 256, height: 256 }), x = c.getContext('2d');
-  x.fillStyle = '#fff'; x.fillRect(0, 0, 256, 256); x.strokeStyle = 'rgba(0,0,0,.3)'; x.lineWidth = 2; PATTERNS[kind](x);
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return texCache[kind] = t;
+  if (!TEXTURES[kind]) return texCache[kind] = null;
+  const [size, gain, rough] = TEXTURES[kind], waiting = [];
+  const load = (part, srgb) => new Promise((ok, no) => loader.load(`textures/${kind}_${part}.webp`, t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / size, 1 / size); t.anisotropy = anisotropy;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.userData.mimeType = 'image/jpeg'; // GLB-eksporten skriver JPEG i stedet for store PNG-er
+    ok(t);
+  }, undefined, no));
+  const entry = texCache[kind] = { waiting, maps: null };
+  Promise.all([load('color', true), load('normal'), load('arm')]).then(([map, normalMap, arm]) => {
+    entry.maps = { map, normalMap, arm, gain, rough };
+    for (const [m, r] of waiting) dress(m, r, entry.maps);
+    waiting.length = 0; redraw();
+  }, () => { entry.failed = true; }); // uten nett eller fil: materialet blir værende i ren farge
+  return entry;
+}
+// Legger teksturene på et materiale. Fargen forsterkes så snittet av farge × kart blir JSON-fargen, og ruheten skaleres så
+// snittet blir materialets ruhet. ARM-kartet er også metallkart (B = 0, ingen er metall), så GLB-eksporten kan bruke det som det er.
+function dress(m, rough, t) {
+  Object.assign(m, { map: t.map, normalMap: t.normalMap, aoMap: t.arm, roughnessMap: t.arm, metalnessMap: t.arm, roughness: rough / t.rough });
+  m.color.multiplyScalar(t.gain); m.needsUpdate = true;
 }
 function mat(material, color) {
   const key = material + color;
@@ -38,7 +54,16 @@ function mat(material, color) {
     const g = new THREE.MeshStandardMaterial({ color, roughness: .05, transparent: true, opacity: .4, envMapIntensity: 2.5, emissive: GLOW, emissiveIntensity: glow });
     glassMats.push(g); return matCache[key] = g;
   }
-  return matCache[key] = new THREE.MeshStandardMaterial({ color, roughness: m.rough, metalness: m.metal || 0, map: texture(material) });
+  const out = matCache[key] = new THREE.MeshStandardMaterial({ color, roughness: m.rough, metalness: m.metal || 0 });
+  const kind = MATERIALS[material] ? material : 'maling', t = textures(kind);
+  out.userData.tex = [kind, m.rough];
+  if (t?.maps) dress(out, m.rough, t.maps); else later(out);
+  return out;
+}
+// Et materiale (eller en kopi, f.eks. for markering av valgt objekt) som får teksturene når de er lastet.
+function later(m) {
+  const [kind, rough] = m.userData.tex || [], t = texCache[kind];
+  if (t && !t.maps && !t.failed) t.waiting.push([m, rough]);
 }
 const GLOW = new THREE.Color('#ffc98a'), glassMats = []; let glow = 0;
 function setGlow(v) { if (v === glow) return; glow = v; for (const g of glassMats) g.emissiveIntensity = v; }
@@ -273,7 +298,7 @@ function buildRoof(house, upTo) {
       });
     });
     surface(group, roofFaces, mat(r.material, r.color));
-    surface(group, gableFaces, mat(outer?.material || 'panel', outer?.color || '#e9e4d8'));
+    surface(group, gableFaces, mat(outer?.material || 'panel_hvit', outer?.color || '#e9e4d8'));
   });
   return group.children.length ? group : null;
 }
@@ -342,6 +367,7 @@ const MAX_LAMPS = matchMedia('(pointer: coarse)').matches ? 6 : 10;
 
 export function createView(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1; // filmisk: myke høylys i stedet for utbrent hvitt
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, .05, 300);
@@ -375,6 +401,7 @@ export function createView(canvas) {
   const center = new THREE.Vector3();
   const walk = { yaw: 0, pitch: 0, move: [0, 0], saved: null };
   const invalidate = () => { dirty = true; };
+  redraw = invalidate; // tegn på nytt når en tekstur er lastet
   controls.addEventListener('change', invalidate);
   const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -505,7 +532,7 @@ export function createView(canvas) {
     const o = byId[id]; if (!o) return;
     o.traverse(m => {
       if (!m.isMesh || (id !== m.parent.userData.id && m.parent.userData.kind === 'opening')) return;
-      m.material = m.material.clone(); m.material.emissive.set('#2f8f6b'); m.material.emissiveIntensity = .45; lit.push(m.material);
+      m.material = m.material.clone(); m.material.emissive.set('#2f8f6b'); m.material.emissiveIntensity = .45; lit.push(m.material); later(m.material);
     });
     invalidate();
   }
