@@ -223,7 +223,7 @@ async function analyzeRoute(req, res) {
   try {
     const { images } = await readBody(req);
     if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Sett ANTHROPIC_API_KEY (i .env lokalt, som hemmelighet hos verten) og start serveren på nytt.');
-    if (!Array.isArray(images) || images.length < 5) throw fail(400, `Velg minst 5 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
+    if (!Array.isArray(images) || images.length < 3) throw fail(400, `Velg minst 3 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
     if (images.length > 30) throw fail(400, `Du kan sende høyst 30 bilder (fikk ${images.length}).`);
     const done = await analyze(images, on, ac.signal);
     if (started) line({ type: 'done', ...done }); else send(res, 200, done);
@@ -250,5 +250,7 @@ const server = http.createServer(async (req, res) => {
   });
 });
 // Verten setter PORT. På Render og Railway må serveren lytte på alle grensesnitt; lokalt bare på maskinen selv.
+// Testene (test/fake-server.js) låner serveren for de statiske filene og bytter ut /api/*, så den startes bare når filen kjøres direkte.
+module.exports = server;
 const PORT = +E.PORT || 3000, HOST = E.HOST || (E.RENDER || E.RAILWAY_PROJECT_ID ? '0.0.0.0' : '127.0.0.1');
-server.listen(PORT, HOST, () => console.log(`Husform: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+if (require.main === module) server.listen(PORT, HOST, () => console.log(`Husform: http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
