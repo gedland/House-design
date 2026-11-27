@@ -75,7 +75,9 @@ const colorF = (label = 'Farge') => ({ key: 'color', label, type: 'color' }), ma
 const FIELDS = {
   room: [{ key: 'name', label: 'Navn', type: 'text', wide: true }, num('w', 'Bredde (m)', .5), num('d', 'Dybde (m)', .5), num('height', 'Takhøyde (m)', 1, .05, 6), matF('Gulv'), colorF('Gulvfarge'), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   wall: [colorF(), matF(), num('length', 'Lengde (m)', .2), num('angle', 'Retning (°)', -360, 15), num('thickness', 'Tykkelse (m)', .05, .01, .6)],
-  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), matF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)')],
+  opening: [{ key: 'type', label: 'Type', type: 'select', options: opts(OPENINGS) }, colorF(), matF(), num('width', 'Bredde (m)', .3), num('height', 'Høyde (m)', .3), num('sill', 'Høyde over gulv (m)'), num('pos', 'Avstand langs vegg (m)'),
+    { key: 'open', label: 'Åpen', type: 'range', min: 0, max: 90, step: 5, unit: '°', wide: true, only: 'door' },
+    { key: 'swing', label: 'Hengsler', type: 'seg', options: [['left', 'Venstre'], ['right', 'Høyre']], wide: true, only: 'door', hint: 'Sett fra siden døren slår mot' }],
   furniture: [{ key: 'type', label: 'Type', type: 'select', options: opts(FURNITURE) }, colorF(), matF(), num('w', 'Bredde (m)', .1), num('d', 'Dybde (m)', .1), num('h', 'Høyde (m)', .1), num('rot', 'Rotasjon (°)', -360, 15), num('x', 'Plassering X (m)', -500), num('z', 'Plassering Z (m)', -500)],
   roof: [{ key: 'type', label: 'Takform', type: 'select', options: opts(ROOFS) }, colorF(), matF(), num('pitch', 'Takvinkel (°)', 5, 1, 60), num('overhang', 'Takutstikk (m)', 0, .05, 2)],
 };
@@ -94,7 +96,7 @@ function setValue(f, key, v) {
   else if (f.kind === 'wall' && key === 'angle') { setWall(f.item, wallLength(f.item), v); fitOpenings(f.item); }
   else if (f.kind === 'room' && key === 'height') { f.floor.height = v; for (const w of f.floor.walls) fitOpenings(w, v); }
   else if (f.kind === 'room' && 'xzwd'.includes(key)) reshapeRoom(f.floor, f.item, { [key]: v });
-  else if (key === 'type' && f.kind === 'opening') { const { label, width, color, ...d } = OPENINGS[v]; Object.assign(f.item, d, { type: v }); } // ny type får riktig høyde, brystning og materiale
+  else if (key === 'type' && f.kind === 'opening') { const { label, width, color, ...d } = OPENINGS[v]; delete f.item.open; delete f.item.swing; Object.assign(f.item, d, { type: v }); } // ny type får riktig høyde, brystning og materiale
   else if (key === 'type' && f.kind === 'furniture') { const { label, ...d } = FURNITURE[v]; Object.assign(f.item, d, { type: v }); }
   else f.item[key] = v;
   if (f.kind === 'opening') fitOpenings(f.wall, H);
@@ -104,8 +106,27 @@ function selectionPanel(f) {
   const inputs = [];
   // Viser verdiene slik de ble etter endringen, f.eks. når et mål ble stoppet av en nabo. Feltet det skrives i får stå i fred.
   const sync = all => { const g = find(S.house, S.sel); if (g) for (const [d, el] of inputs) if (all || el !== document.activeElement) el.value = getValue(g, d.key) ?? ''; };
-  const fields = FIELDS[f.kind].map(d => {
+  const fields = FIELDS[f.kind].filter(d => !d.only || d.only === f.item.type).map(d => {
     const v = getValue(f, d.key);
+    // To knapper side om side (f.eks. hengslenes side). Oppfører seg som en nedtrekksliste for resten av panelet.
+    if (d.type === 'seg') {
+      const group = h('div', { className: 'seg', role: 'radiogroup', ariaLabel: d.label });
+      const paint = val => { for (const b of group.children) b.ariaChecked = String(b.value === val); };
+      group.append(...d.options.map(([value, label]) => btn(label, () => {
+        restore(); edit(() => setValue(find(S.house, S.sel), d.key, value)); paint(value);
+      }, { role: 'radio', value })));
+      paint(v);
+      inputs.push([d, { set value(x) { paint(x); } }]);
+      return h('div', { className: 'wide field' }, h('span', { textContent: d.label }), group, d.hint && h('small', { textContent: d.hint }));
+    }
+    if (d.type === 'range') {
+      const out = h('output', { textContent: `${v ?? 0}${d.unit}` });
+      const input = h('input', { type: 'range', min: d.min, max: d.max, step: d.step, value: v ?? 0, ariaLabel: d.label });
+      input.oninput = () => { const val = Math.min(d.max, Math.max(d.min, +input.value)); out.textContent = `${val}${d.unit}`; restore(); edit(() => setValue(find(S.house, S.sel), d.key, val), false); };
+      input.onchange = () => commit();
+      inputs.push([d, { set value(x) { if (document.activeElement !== input) input.value = x; out.textContent = `${x}${d.unit}`; } }]);
+      return h('label', { className: 'wide range' }, h('span', {}, d.label, ' ', out), input);
+    }
     const input = d.type === 'select'
       ? h('select', {}, d.options.map(([value, label]) => h('option', { value, textContent: label, selected: value === v })))
       : h('input', { type: d.type, value: v ?? '', ...(d.type === 'text' ? { maxLength: 40 } : {}), ...(d.type === 'number' ? { min: d.min, max: d.max, step: d.step, inputMode: 'decimal' } : {}) });
@@ -115,7 +136,7 @@ function selectionPanel(f) {
       restore(); edit(() => setValue(find(S.house, S.sel), d.key, val), false); sync();
       if (d.key === 'name' || d.key === 'type') $('#panel h2').textContent = title(find(S.house, S.sel));
     };
-    input.onchange = () => { commit(); sync(true); };
+    input.onchange = () => { commit(); sync(true); if (d.key === 'type') ui(); }; // dører har egne felt
     inputs.push([d, input]);
     return h('label', { className: d.wide ? 'wide' : '' }, h('span', { textContent: d.label }), input);
   });
@@ -503,7 +524,8 @@ function placeLabels() {
   const p = view.camera.position, f = S.walk && S.house.floors[S.walk.floor], here = f && inRoom(f, p.x, p.z);
   for (const l of labels) {
     l.s = null;
-    if (l.r !== here) for (const [x, z] of l.pts) { const q = view.screen(x, l.y, z); if (q && !view.hidden(x, l.y, z)) { l.s = q; l.d = Math.hypot(x - p.x, z - p.z); break; } }
+    // Rommet du står i, sammenlignes på id: huset byttes ut med nye objekter ved hver lagring.
+    if (l.r.id !== here?.id) for (const [x, z] of l.pts) { const q = view.screen(x, l.y, z); if (q && !view.hidden(x, l.y, z)) { l.s = q; l.d = Math.hypot(x - p.x, z - p.z); break; } }
   }
   // Nærmeste rom først. Et navn som ville havnet oppå et annet, skjules.
   const taken = [];

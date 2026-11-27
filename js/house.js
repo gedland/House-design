@@ -4,7 +4,9 @@
 //   floors: [{ id, name, height,
 //     rooms:     [{ id, name, x, z, w, d, material, color }],            // x,z = hjørne, w = bredde (x), d = dybde (z); materiale/farge gjelder gulvet
 //     walls:     [{ id, x1, z1, x2, z2, thickness, exterior, material, color,   // (x1,z1)–(x2,z2) = midtlinjen; exterior = yttervegg
-//                   openings: [{ id, type: 'door'|'window', pos, width, height, sill, material, color }] }],  // pos = senter, målt fra (x1,z1); materiale/farge gjelder dørblad eller karm
+//                   openings: [{ id, type: 'door'|'window', pos, width, height, sill, material, color,   // pos = senter, målt fra (x1,z1); materiale/farge gjelder dørblad eller karm
+//                                open, swing }] }],   // bare dører: open = grader åpen (0–90), swing = 'left'|'right' = hengslenes side sett fra siden døren slår mot
+//                                                     // (dører slår inn i det største rommet, ytterdører slår utover)
 //     furniture: [{ id, type, x, z, rot, w, d, h, material, color }]     // x,z = senter; rot i grader: 0 = baksiden mot −z, 90 = mot −x, 180 = mot +z, −90 = mot +x
 //   }],                                                                 // height = gulv til gulv (øverste etasje: vegghøyde opp til takfoten)
 //   roof: { type: 'gable'|'hip'|'flat', pitch, overhang, material, color } | null
@@ -29,14 +31,14 @@ export const FURNITURE = {
   plante: { label: 'Plante', w: .5, d: .5, h: 1.2, material: 'maling', color: '#4f7a4c' },
   annet: { label: 'Annet', w: .8, d: .8, h: .8, material: 'maling', color: '#b9b4a8' },
 };
-export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, material: 'tre', color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, material: 'maling', color: '#f2efe8' } };
+export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, material: 'tre', color: '#5a3b26', open: 0, swing: 'left' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, material: 'maling', color: '#f2efe8' } };
 export const ROOFS = { gable: 'Saltak', hip: 'Valmtak', flat: 'Flatt tak' };
 export const uid = p => p + Math.random().toString(36).slice(2, 8);
 export const round = v => Math.round(v * 1000) / 1000;
 
 const P = '#e9e4d8', I = '#f1eee7', WF = '#f2efe8';
 const win = (pos, width = 1.2, height = 1.2, sill = .9) => ({ type: 'window', pos, width, height, sill, material: 'maling', color: WF });
-const door = (pos, color = '#efece6') => ({ type: 'door', pos, width: .9, height: 2.1, sill: 0, material: 'tre', color });
+const door = (pos, color = '#efece6', open = 0, swing = 'left') => ({ type: 'door', pos, width: .9, height: 2.1, sill: 0, material: 'tre', color, open, swing });
 const outer = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .2, exterior: true, material: 'panel', color: P, openings });
 const inner = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .1, exterior: false, material: 'maling', color: I, openings });
 const item = (type, x, z, rot = 0, o = {}) => ({ ...FURNITURE[type], label: undefined, type, x, z, rot, ...o });
@@ -56,9 +58,9 @@ const DEMO_RAW = {
       outer(9, 7, 9, 0, [win(1.5), win(5, 1.2, 1, 1.1)]),
       outer(9, 0, 0, 0, [win(1.75, 1.2, 1, 1.1), win(6.25, 2.4, 1.5, .6)]),
       outer(0, 0, 0, 7, [win(2, 1.4)]),
-      inner(0, 4, 9, 4, [door(4.25)]),
+      inner(0, 4, 9, 4, [door(4.25, undefined, 80)]),
       inner(3, 4, 3, 7, [door(1.5)]),
-      inner(5.5, 4, 5.5, 7, [door(1.5)]),
+      inner(5.5, 4, 5.5, 7, [door(1.5, undefined, 60, 'right')]),
       inner(5.5, 0, 5.5, 4, [door(2.9)]),
     ],
     furniture: [
@@ -105,7 +107,8 @@ export function normalize(h) {
     id: id(f, 'f'), name: String(f.name || `${i + 1}. etasje`).slice(0, 40), height: n(f.height, 2.4, 1, 6),
     rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'tre'), color: col(r.color, '#c8a57a') })),
     walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), exterior: typeof w.exterior === 'boolean' ? w.exterior : +w.thickness >= .15, material: mt(w.material, 'maling'), color: col(w.color, P),
-      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), material: mt(o.material, d.material), color: col(o.color, d.color) }; }) }))
+      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), material: mt(o.material, d.material), color: col(o.color, d.color),
+        ...(t === 'door' ? { open: n(o.open, 0, 0, 90), swing: /^(right|r|høyre|h)$/i.test(String(o.swing ?? '').trim()) ? 'right' : 'left' } : {}) }; }) }))
       .filter(w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1) >= .1),
     furniture: arr(f.furniture).map(m => { const t = FURNITURE[m.type] ? m.type : 'annet', d = FURNITURE[t]; return { id: id(m, 'm'), type: t, x: n(m.x, 0), z: n(m.z, 0), rot: n(m.rot, 0, -360, 360), w: n(m.w, d.w, .1, 12), d: n(m.d, d.d, .1, 12), h: n(m.h, d.h, .1, 5), material: mt(m.material, d.material), color: col(m.color, d.color) }; }),
   }));
