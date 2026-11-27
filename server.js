@@ -13,7 +13,29 @@ const fail = (status, error) => Object.assign(new Error(error), { status });
 // Skjemaet Claude må svare i: en kort befaring (survey) og huset. Huset er det samme som øverst i js/house.js, uten id-er
 // (de lages av normalize). Befaringen tvinger frem arbeidsrekkefølgen og logges, så tolkningen kan feilsøkes.
 const HOUSE = import('./js/house.js');
-const MATERIALS = ['maling', 'tre', 'panel', 'betong', 'flis', 'murstein', 'tekstil', 'metall', 'takstein'];
+// Materialene i js/house.js (MATERIALS), med når de skal brukes. Fargen farger materialet, så materialet velges etter overflaten, ikke fargen.
+const MATERIAL_USE = {
+  maling: 'glatte, malte innervegger og himlinger, malte dører, vinduskarmer og kjøkkenfronter',
+  puss: 'pusset eller slemmet mur, ute og inne',
+  mikrosement: 'sømløse, matte gulv og vegger, ofte på bad og i moderne stuer',
+  betong: 'rå betong: grunnmur, betonggulv, støpte vegger',
+  eik: 'eikeparkett og andre brune tregulv, eikemøbler, tredører',
+  furu: 'furugulv, furupanel og furumøbler med gul eller oransje tone og kvister',
+  parkett_hvit: 'hvitlasert eller hvitpigmentert parkett, svært lyse tregulv',
+  flis_hvit: 'hvite og lyse fliser på bad- og kjøkkenvegger og -gulv, toalett, dusj',
+  flis_gra: 'grå, mørke eller store gulvfliser og steinfliser',
+  panel_hvit: 'malt trekledning ute og malt panel inne, i alle farger (rød, gul, hvit kledning)',
+  panel_beiset: 'beiset eller oljet kledning og panel der treverket synes gjennom',
+  tegl: 'teglstein og murstein, fasade eller pipe',
+  betongtakstein: 'takstein og takpanner av betong eller tegl, bølgete profil',
+  skifer: 'skifertak og andre flate, rektangulære takplater',
+  stoff: 'sofa, seng og andre tekstiler',
+  laer: 'skinnsofa, skinnstoler',
+  metall: 'stål, aluminium, platetak og beslag',
+};
+const MATERIALS = Object.keys(MATERIAL_USE);
+// Sjekker ved oppstart at listen over følger js/house.js, så skjemaet og appen ikke glir fra hverandre.
+HOUSE.then(h => { const a = Object.keys(h.MATERIALS).sort().join(), b = [...MATERIALS].sort().join(); if (a !== b) console.warn(`Materialene i server.js (${b}) avviker fra js/house.js (${a}).`); });
 const FURNITURE = ['sofa', 'bord', 'stol', 'seng', 'skap', 'kjokken', 'tv', 'toalett', 'vask', 'dusj', 'lampe', 'plante', 'annet'];
 const obj = properties => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 const list = items => ({ type: 'array', items }), N = { type: 'number' }, T = { type: 'string' }, one = values => ({ type: 'string', enum: values });
@@ -77,6 +99,8 @@ Anslå noe vanlig for et hus av denne typen og alderen, aldri la noe mangle. Sva
 - Åpninger ligger i veggen de står i. "pos" er avstanden langs veggen fra (x1, z1) til midten av åpningen, så det har betydning hvilken ende av veggen som er (x1, z1). Hele åpningen skal ligge innenfor veggen, minst 0.1 fra endene, og åpninger i samme vegg skal ikke overlappe. "sill" er høyden fra gulvet til underkanten, 0 for dører. sill + height skal være lavere enn etasjehøyden. "material" og "color" gjelder dørbladet eller vinduskarmen. For dører er "open" hvor mange grader døren står åpen på bildene (0 = lukket, 90 = helt åpen), og "swing" er siden hengslene sitter på, sett fra siden døren slår mot. Innerdører slår inn i det største rommet, ytterdører slår utover. Vinduer får open 0 og swing "left".
 - Møbler: x og z er midtpunktet, og hele møbelet skal stå inne i rommet. w er bredden fra side til side, d er dybden forfra og bakover, h er høyden. "rot" er retningen i grader: 0 betyr at baksiden vender mot z = 0, 90 at den vender mot x = 0 (venstre), 180 mot inngangsfasaden og -90 mot høyre. Bruk "annet" for møbler som ikke passer noen type. Ta med høyst rundt 40 møbler.
 - Tak: "gable" (saltak), "hip" (valmtak) eller "flat". "pitch" er takvinkelen i grader, "overhang" er takutstikket i meter. Mønet går langs husets lengste side.
+- Materialer: velg det som ligner overflaten mest i bildene. Hvert materiale har en tekstur med riktig målestokk, og "color" farger teksturen, så materialet sier hva overflaten er, og fargen sier hvilken farge den har. Rødmalt kledning er "panel_hvit" med rød farge, lys eik er "eik" med lys farge.
+${Object.entries(MATERIAL_USE).map(([k, v]) => `  - ${k}: ${v}`).join('\n')}
 - Farger er hex-koder lest av bildene: fasade, tak, vindusrammer, dører og gulv. Rom og hus får navn på norsk. Gi huset et kort, beskrivende navn, for eksempel «Rødt hus med saltak».`;
 const FIX = problems => `Kontrollen av huset fant disse feilene:
 ${problems.map(p => `- ${p.text}`).join('\n')}
