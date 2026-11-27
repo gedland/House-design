@@ -241,5 +241,9 @@ const server = http.createServer(async (req, res) => {
   const type = TYPES[name.split('.').pop()];
   fs.readFile(path.join(__dirname, name), (err, buf) => { res.writeHead(err ? 500 : 200, { 'Content-Type': type + (type.startsWith('image/png') ? '' : '; charset=utf-8'), 'Cache-Control': 'no-cache' }); res.end(err ? 'Feil' : buf); });
 });
-const PORT = +E.PORT || 3000, HOST = E.HOST || '127.0.0.1';
-server.listen(PORT, HOST, () => console.log(`Husform: http://localhost:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+// Startes serveren direkte (node server.js), lytter den. Importeres den (eval/kjor.mjs), brukes bare analyze().
+if (require.main === module) {
+  const PORT = +E.PORT || 3000, HOST = E.HOST || '127.0.0.1';
+  server.listen(PORT, HOST, () => console.log(`Husform: http://localhost:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+}
+module.exports = { analyze, MODEL, hasKey: !!KEY };

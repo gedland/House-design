@@ -27,5 +27,6 @@ Serveren har ingen innlogging. Legger du den åpent på nettet, kan alle som fin
 - `textures/`: PBR-teksturer fra [Poly Haven](https://polyhaven.com) (CC0), 1k webp. `textures/lag.py` laster dem ned og lager dem på nytt (Python med numpy og Pillow).
 - `js/app.js`: grensesnitt, redigering, lagring, eksport.
 - `server.js`: statiske filer og `POST /api/analyze`. Svaret strømmes som linjer med JSON (fremdrift, så huset eller en feil).
+- `eval/`: hus med bilder og fasit, og `npm run eval`, som kjører tolkningen på dem, måler grunnflate, etasjer, takform og dører og vinduer per fasade, og foreslår endringer i prompten. Se `eval/README.md`.
 
 Ved endringer i filene: øk `VERSION` i `service-worker.js`.
