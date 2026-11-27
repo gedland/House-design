@@ -6,6 +6,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MATERIALS, bounds } from './house.js';
+import { createSurroundings } from './surroundings.js';
 
 // PBR-teksturer fra Poly Haven (CC0), 1k webp i textures/: <navn>_color (farge), _normal og _arm (R = AO, G = ruhet).
 // Fargekartet er delt på sin egen gjennomsnittsfarge, så JSON-fargen bestemmer fargen og teksturen bare gir mønster og liv.
@@ -51,7 +52,7 @@ function mat(material, color) {
   if (matCache[key]) return matCache[key];
   const m = MATERIALS[material] || MATERIALS.maling;
   if (material === 'glass') { // sterkere omgivelseskart, så himmelen speiles i rutene. Om kvelden gløder rutene av lyset inne.
-    const g = new THREE.MeshStandardMaterial({ color, roughness: .05, transparent: true, opacity: .4, envMapIntensity: 2.5, emissive: GLOW, emissiveIntensity: glow });
+    const g = new THREE.MeshStandardMaterial({ color, roughness: .05, transparent: true, ...glass(clearGlass), emissive: GLOW, emissiveIntensity: glow });
     glassMats.push(g); return matCache[key] = g;
   }
   const out = matCache[key] = new THREE.MeshStandardMaterial({ color, roughness: m.rough, metalness: m.metal || 0 });
@@ -67,6 +68,10 @@ function later(m) {
 }
 const GLOW = new THREE.Color('#ffc98a'), glassMats = []; let glow = 0;
 function setGlow(v) { if (v === glow) return; glow = v; for (const g of glassMats) g.emissiveIntensity = v; }
+// Innenfra er rutene nesten klare (som ekte vinduer på dagtid), så utsikten mot hage og himmel ikke blir grå og tåkete.
+let clearGlass = false;
+const glass = clear => clear ? { opacity: .12, envMapIntensity: .4 } : { opacity: .4, envMapIntensity: 2.5 };
+function setClear(v) { clearGlass = v; for (const g of glassMats) Object.assign(g, glass(v)); }
 const shade = (color, k) => '#' + new THREE.Color(color).multiplyScalar(k).getHexString();
 // Boks med UV i meter, så mønstrene får riktig målestokk uansett størrelse.
 function boxGeo(w, h, d) {
@@ -340,8 +345,8 @@ class ContactShadows extends GTAOPass {
 
 // Lysstemninger. Dag: høy sol og lys himmel. Kveld: lav, varm sol, mørkeblå himmel og lys i rommene (den blå timen).
 const MOODS = {
-  day: { top: '#7ea4cd', mid: '#c4d6e6', horizon: '#eef1ec', ground: '#b5c4a2', sun: ['#fff4e0', 2], sunAt: [-9, 16, 7], hemi: ['#ffffff', '#8a8578', 1], env: .5, lamps: 0, exposure: 1 },
-  evening: { top: '#1a3160', mid: '#6d90c2', horizon: '#efbb92', ground: '#5a6656', sun: ['#ffa468', 1], sunAt: [-16, 4.5, 10], hemi: ['#86a0d4', '#3a3632', 2.6], env: .35, lamps: 1, exposure: 1.05 },
+  day: { top: '#7ea4cd', mid: '#c4d6e6', horizon: '#eef1ec', grass: '#d6dacb', hills: '#5f7a68', sun: ['#fff4e0', 2], sunAt: [-9, 16, 7], hemi: ['#ffffff', '#8a8578', 1], env: .5, lamps: 0, exposure: 1 },
+  evening: { top: '#1a3160', mid: '#6d90c2', horizon: '#efbb92', grass: '#8e9a94', hills: '#2c3d4a', sun: ['#ffa468', 1], sunAt: [-16, 4.5, 10], hemi: ['#86a0d4', '#3a3632', 2.6], env: .35, lamps: 1, exposure: 1.05 },
 };
 // Himmel som følger kameraet: lys mot horisonten, mørkere opp mot toppen. Bakken tones inn i horisonten med dis.
 function skyDome() {
@@ -384,8 +389,8 @@ export function createView(canvas) {
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0005; sun.shadow.normalBias = .03;
   Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 90 });
   scene.add(sun, sun.target);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(160, 64), new THREE.MeshStandardMaterial({ roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2; ground.position.y = -.16; ground.receiveShadow = true; scene.add(ground);
+  // Plen, sti, trær og horisont. Utenfor root: kan ikke velges og tas ikke med i GLB-eksporten.
+  const surroundings = createSurroundings(); scene.add(surroundings.group);
   // Etterbehandling: scenen (med kantutjevning) → kontaktskygger → tonemapping og fargerom.
   // Uten flyttall-bilder tegnes scenen rett ut, fortsatt med tonemapping, men uten kontaktskygger.
   let composer = null, ao = null;
@@ -489,7 +494,7 @@ export function createView(canvas) {
     const tone = hex => untone(hex, mood.exposure), u = sky.material.uniforms;
     renderer.toneMappingExposure = mood.exposure;
     u.top.value.copy(tone(mood.top)); u.mid.value.copy(tone(mood.mid)); u.horizon.value.copy(tone(mood.horizon)); scene.fog.color.copy(u.horizon.value);
-    ground.material.color.set(mood.ground);
+    surroundings.setMood(mood);
     sun.color.set(mood.sun[0]); sun.intensity = mood.sun[1];
     hemi.color.set(mood.hemi[0]); hemi.groundColor.set(mood.hemi[1]); hemi.intensity = (hdr ? .3 : 1.5) * mood.hemi[2];
     if (hdr) scene.environmentIntensity = mood.env;
@@ -497,7 +502,7 @@ export function createView(canvas) {
   }
   // Lys som avhenger av både stemning og om du er inne: lamper, glødende ruter (bare sett utenfra) og fyllys inne.
   function lights() {
-    updateLamps(); setGlow(mood.lamps && mode === 'orbit' ? .9 : 0);
+    updateLamps(); setGlow(mood.lamps && mode === 'orbit' ? .9 : 0); setClear(mode === 'walk');
     fill.intensity = mode === 'walk' ? (mood.lamps ? .25 : .55) : 0; invalidate();
   }
 
@@ -516,6 +521,7 @@ export function createView(canvas) {
       y += f.height;
     }
     const roof = buildRoof(house, floor); if (roof) root.add(roof);
+    surroundings.update(house);
     root.traverse(o => { if (o.userData.id) byId[o.userData.id] = o; });
     // Det som kan skjule et romnavn: vegger, gulv og tak. Ikke dører, vinduer, glass og møbler.
     occluders = [];
