@@ -21,6 +21,20 @@ node server.js
 **Med egne bilder:** lag `.env` med `ANTHROPIC_API_KEY=...` (valgfritt `CLAUDE_MODEL`, `PORT`, `HOST`). Nøkkelen brukes bare på serveren. Hvert hus koster penger hos Anthropic.
 Serveren har ingen innlogging. Legger du den åpent på nettet, kan alle som finner den bruke nøkkelen din.
 
+## Legg ut på nett
+Appen kjører som en vanlig Node-tjeneste på Render eller Railway. Oppsettet ligger i repoet: `render.yaml` (Render) og `railway.json` (Railway). Begge starter `node server.js` og bruker helsesjekken `GET /healthz`, som svarer `{"ok":true,"ai":true|false}` uten å kalle Claude.
+
+**API-nøkkelen settes bare som hemmelighet hos verten**, aldri i repoet eller i en `.env` som sjekkes inn.
+
+- **Render:** New → Blueprint → velg repoet. Render leser `render.yaml` og ber om verdien til `ANTHROPIC_API_KEY`. Lim inn nøkkelen der.
+- **Railway:** New Project → Deploy from GitHub repo → velg repoet. Legg nøkkelen inn under Variables som `ANTHROPIC_API_KEY`, og lag en offentlig adresse under Settings → Networking.
+
+Verten setter `PORT`. Serveren lytter da på `0.0.0.0` (alle grensesnitt) på Render og Railway, og på `127.0.0.1` lokalt. Begge kan overstyres med `PORT` og `HOST`. `CLAUDE_MODEL` kan settes på samme måte. Endres en variabel, må tjenesten starte på nytt.
+
+Sjekk etterpå at `https://<adressen>/healthz` svarer med `"ai":true`. Med `"ai":false` mangler nøkkelen, og appen viser bare demohuset.
+
+**Obs:** serveren har ingen innlogging. Alle som har adressen, kan tolke bilder på din regning. Sett gjerne en månedlig utgiftsgrense i Anthropic Console.
+
 ## Filer
 - `js/house.js`: JSON-skjemaet (øverst i filen), demohuset, `normalize()` og kontrollen `inspect()`. Serveren bruker samme fil (`js/package.json` gjør den til en ES-modul for Node).
 - `js/scene.js`: JSON → Three.js.
