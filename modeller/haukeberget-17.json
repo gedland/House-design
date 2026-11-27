@@ -1,0 +1,2320 @@
+{
+  "version": 1,
+  "name": "Haukeberget 17",
+  "floors": [
+    {
+      "id": "fm26b9s",
+      "name": "Underetasje",
+      "height": 2.5,
+      "rooms": [
+        {
+          "id": "rwa6tks",
+          "name": "Kjellerstue",
+          "x": 11.21,
+          "z": 0,
+          "w": 7.65,
+          "d": 4.85,
+          "material": "eik",
+          "color": "#b98c5c"
+        },
+        {
+          "id": "rjfkdkd",
+          "name": "Trapp",
+          "x": 15.56,
+          "z": 4.85,
+          "w": 3.29,
+          "d": 1.46,
+          "material": "eik",
+          "color": "#b98c5c"
+        },
+        {
+          "id": "rz1ks78",
+          "name": "Gang",
+          "x": 14.1,
+          "z": 4.85,
+          "w": 1.46,
+          "d": 1.46,
+          "material": "flis_gra",
+          "color": "#9b9893"
+        },
+        {
+          "id": "rictxjm",
+          "name": "Gang",
+          "x": 14.1,
+          "z": 6.31,
+          "w": 1.1,
+          "d": 11.08,
+          "material": "flis_gra",
+          "color": "#9b9893"
+        },
+        {
+          "id": "r8qczd4",
+          "name": "Gang",
+          "x": 11.21,
+          "z": 17.4,
+          "w": 4,
+          "d": 1.92,
+          "material": "flis_gra",
+          "color": "#9b9893"
+        },
+        {
+          "id": "rogydxj",
+          "name": "Bod",
+          "x": 11.21,
+          "z": 4.85,
+          "w": 2.9,
+          "d": 3.52,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "r4fmznr",
+          "name": "Bod",
+          "x": 11.21,
+          "z": 8.38,
+          "w": 2.9,
+          "d": 1.63,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "r0dyl5a",
+          "name": "Bod",
+          "x": 11.21,
+          "z": 10,
+          "w": 2.9,
+          "d": 1.67,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "r7tlini",
+          "name": "Bod",
+          "x": 11.21,
+          "z": 11.67,
+          "w": 2.9,
+          "d": 1.35,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "r5y0z9v",
+          "name": "Bod",
+          "x": 11.21,
+          "z": 13.02,
+          "w": 2.9,
+          "d": 1.56,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "rywagxo",
+          "name": "Trapp",
+          "x": 11.21,
+          "z": 14.58,
+          "w": 1.25,
+          "d": 2.81,
+          "material": "eik",
+          "color": "#b98c5c"
+        },
+        {
+          "id": "reqwhzc",
+          "name": "Bod",
+          "x": 12.46,
+          "z": 14.58,
+          "w": 1.65,
+          "d": 1.23,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "rnobhpb",
+          "name": "Bod",
+          "x": 12.46,
+          "z": 15.81,
+          "w": 1.65,
+          "d": 1.58,
+          "material": "betong",
+          "color": "#aaa79f"
+        },
+        {
+          "id": "rku9fqu",
+          "name": "Vaskerom",
+          "x": 15.21,
+          "z": 6.31,
+          "w": 3.65,
+          "d": 2.79,
+          "material": "flis_gra",
+          "color": "#aeb4b5"
+        },
+        {
+          "id": "r685a95",
+          "name": "Forrom",
+          "x": 15.21,
+          "z": 9.1,
+          "w": 1.63,
+          "d": 3.08,
+          "material": "flis_gra",
+          "color": "#aeb4b5"
+        },
+        {
+          "id": "rab96gn",
+          "name": "Bad",
+          "x": 16.83,
+          "z": 9.1,
+          "w": 2.02,
+          "d": 3.08,
+          "material": "flis_gra",
+          "color": "#aeb4b5"
+        },
+        {
+          "id": "rgsj8h9",
+          "name": "Hobbyrom",
+          "x": 15.21,
+          "z": 12.19,
+          "w": 3.65,
+          "d": 7.13,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "rchnnyg",
+          "name": "Uinnredet kjeller",
+          "x": 0,
+          "z": 13.48,
+          "w": 4.73,
+          "d": 5.83,
+          "material": "betong",
+          "color": "#a9a69f"
+        },
+        {
+          "id": "rsadpdj",
+          "name": "Uinnredet kjeller",
+          "x": 4.73,
+          "z": 13.48,
+          "w": 6.48,
+          "d": 2.5,
+          "material": "betong",
+          "color": "#a9a69f"
+        },
+        {
+          "id": "r46cnok",
+          "name": "Bod",
+          "x": 4.73,
+          "z": 15.98,
+          "w": 6.48,
+          "d": 3.33,
+          "material": "betong",
+          "color": "#aaa79f"
+        }
+      ],
+      "walls": [
+        {
+          "id": "w2ibkdn",
+          "x1": 11.21,
+          "z1": 0,
+          "x2": 18.85,
+          "z2": 0,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": [
+            {
+              "id": "okn98d2",
+              "type": "window",
+              "pos": 1.21,
+              "width": 1.9,
+              "height": 1.1,
+              "sill": 0.9,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "ozwuvjh",
+              "type": "window",
+              "pos": 6.13,
+              "width": 1.35,
+              "height": 1.1,
+              "sill": 0.9,
+              "material": "maling",
+              "color": "#f2f1ec"
+            }
+          ]
+        },
+        {
+          "id": "wompxnz",
+          "x1": 18.85,
+          "z1": 0,
+          "x2": 18.85,
+          "z2": 19.31,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": [
+            {
+              "id": "onbp67c",
+              "type": "door",
+              "pos": 2.23,
+              "width": 1,
+              "height": 2.1,
+              "sill": 0,
+              "material": "panel_beiset",
+              "color": "#4a3426",
+              "open": 0,
+              "swing": "right"
+            },
+            {
+              "id": "oig92v3",
+              "type": "window",
+              "pos": 7.29,
+              "width": 1,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "oj0c8ug",
+              "type": "window",
+              "pos": 10.33,
+              "width": 0.95,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "oxpttgz",
+              "type": "window",
+              "pos": 13.9,
+              "width": 1.15,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "o6t9nl1",
+              "type": "window",
+              "pos": 16.98,
+              "width": 1.05,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            }
+          ]
+        },
+        {
+          "id": "wgvi7jf",
+          "x1": 18.85,
+          "z1": 19.31,
+          "x2": 0,
+          "z2": 19.31,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": [
+            {
+              "id": "ozkp1kj",
+              "type": "window",
+              "pos": 2.35,
+              "width": 0.95,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "oxkhj5v",
+              "type": "window",
+              "pos": 5.06,
+              "width": 0.95,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "o4jy9w4",
+              "type": "window",
+              "pos": 8.81,
+              "width": 0.95,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "o5jbu5a",
+              "type": "window",
+              "pos": 12.58,
+              "width": 1,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            }
+          ]
+        },
+        {
+          "id": "waephdq",
+          "x1": 0,
+          "z1": 19.31,
+          "x2": 0,
+          "z2": 13.48,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": []
+        },
+        {
+          "id": "w0ozmlz",
+          "x1": 0,
+          "z1": 13.48,
+          "x2": 11.21,
+          "z2": 13.48,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": [
+            {
+              "id": "ofczwyk",
+              "type": "window",
+              "pos": 7.65,
+              "width": 1.35,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            }
+          ]
+        },
+        {
+          "id": "w5jbs0u",
+          "x1": 11.21,
+          "z1": 13.48,
+          "x2": 11.21,
+          "z2": 0,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": [
+            {
+              "id": "oq6dnaf",
+              "type": "window",
+              "pos": 6.6,
+              "width": 1.4,
+              "height": 0.8,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#f2f1ec"
+            },
+            {
+              "id": "oyiqaey",
+              "type": "door",
+              "pos": 11.69,
+              "width": 0.9,
+              "height": 2.1,
+              "sill": 0,
+              "material": "maling",
+              "color": "#f2f1ec",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wtq2u33",
+          "x1": 11.21,
+          "z1": 13.48,
+          "x2": 11.21,
+          "z2": 19.31,
+          "thickness": 0.25,
+          "exterior": false,
+          "material": "puss",
+          "color": "#eeeeea",
+          "openings": [
+            {
+              "id": "ow9p68o",
+              "type": "door",
+              "pos": 4.79,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "w069elf",
+          "x1": 11.21,
+          "z1": 4.85,
+          "x2": 15.56,
+          "z2": 4.85,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "ovyf6er",
+              "type": "door",
+              "pos": 3.73,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 30,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wyy1h4u",
+          "x1": 15.56,
+          "z1": 4.85,
+          "x2": 15.56,
+          "z2": 6.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "w3ocfnj",
+          "x1": 15.21,
+          "z1": 6.31,
+          "x2": 18.85,
+          "z2": 6.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wpvwe96",
+          "x1": 14.1,
+          "z1": 4.85,
+          "x2": 14.1,
+          "z2": 17.29,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "ow2u7ps",
+              "type": "door",
+              "pos": 1.6,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "odpkmbf",
+              "type": "door",
+              "pos": 4.33,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "ozu3wvv",
+              "type": "door",
+              "pos": 5.98,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "ow41qq4",
+              "type": "door",
+              "pos": 7.5,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "osm1q0i",
+              "type": "door",
+              "pos": 8.96,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "oadukcg",
+              "type": "door",
+              "pos": 10.35,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "oqea5hy",
+              "type": "door",
+              "pos": 11.71,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wn7y8sv",
+          "x1": 15.21,
+          "z1": 6.31,
+          "x2": 15.21,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "o9zpxol",
+              "type": "door",
+              "pos": 0.92,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "oxaqgu4",
+              "type": "door",
+              "pos": 4.04,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "opf7lew",
+              "type": "door",
+              "pos": 10.25,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wh356ed",
+          "x1": 15.21,
+          "z1": 9.1,
+          "x2": 18.85,
+          "z2": 9.1,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wfguyi4",
+          "x1": 15.21,
+          "z1": 12.19,
+          "x2": 18.85,
+          "z2": 12.19,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wb498c5",
+          "x1": 16.83,
+          "z1": 9.1,
+          "x2": 16.83,
+          "z2": 12.19,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "o2yt666",
+              "type": "door",
+              "pos": 1.25,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wuoqkxe",
+          "x1": 11.21,
+          "z1": 8.38,
+          "x2": 14.1,
+          "z2": 8.38,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wcmsdp0",
+          "x1": 11.21,
+          "z1": 10,
+          "x2": 14.1,
+          "z2": 10,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "waxxls9",
+          "x1": 11.21,
+          "z1": 11.67,
+          "x2": 14.1,
+          "z2": 11.67,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wncmmwr",
+          "x1": 11.21,
+          "z1": 13.02,
+          "x2": 14.1,
+          "z2": 13.02,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "w3lknl9",
+          "x1": 11.21,
+          "z1": 14.58,
+          "x2": 14.1,
+          "z2": 14.58,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wcu49vc",
+          "x1": 12.46,
+          "z1": 15.81,
+          "x2": 14.1,
+          "z2": 15.81,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wa15nbf",
+          "x1": 12.46,
+          "z1": 17.29,
+          "x2": 14.1,
+          "z2": 17.29,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wq6y2nt",
+          "x1": 12.46,
+          "z1": 14.58,
+          "x2": 12.46,
+          "z2": 17.29,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wqlgr7d",
+          "x1": 4.73,
+          "z1": 15.98,
+          "x2": 11.21,
+          "z2": 15.98,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wthiotj",
+          "x1": 4.73,
+          "z1": 15.98,
+          "x2": 4.73,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        }
+      ],
+      "furniture": [
+        {
+          "id": "mzeukln",
+          "type": "vask",
+          "x": 18.44,
+          "z": 10.94,
+          "rot": -90,
+          "w": 0.6,
+          "d": 0.45,
+          "h": 0.85,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "mfk3lrn",
+          "type": "toalett",
+          "x": 18.13,
+          "z": 9.485,
+          "rot": 0,
+          "w": 0.4,
+          "d": 0.65,
+          "h": 0.8,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "m9ttdqu",
+          "type": "dusj",
+          "x": 18.13,
+          "z": 11.67,
+          "rot": -90,
+          "w": 0.9,
+          "d": 0.9,
+          "h": 2,
+          "material": "flis_hvit",
+          "color": "#dfe6e8"
+        },
+        {
+          "id": "md61b7e",
+          "type": "annet",
+          "x": 15.57,
+          "z": 8.65,
+          "rot": 90,
+          "w": 0.6,
+          "d": 0.6,
+          "h": 0.85,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "mun1ybe",
+          "type": "vask",
+          "x": 17.4,
+          "z": 8.75,
+          "rot": 180,
+          "w": 0.6,
+          "d": 0.5,
+          "h": 0.85,
+          "material": "maling",
+          "color": "#e6e1d6"
+        }
+      ]
+    },
+    {
+      "id": "fdczhn3",
+      "name": "1. etasje",
+      "height": 2.6,
+      "rooms": [
+        {
+          "id": "rhtsnxb",
+          "name": "Stue",
+          "x": 8.9,
+          "z": 0,
+          "w": 9.96,
+          "d": 4.52,
+          "material": "mikrosement",
+          "color": "#d3d0ca"
+        },
+        {
+          "id": "rpzrydc",
+          "name": "Spisestue",
+          "x": 11.21,
+          "z": 4.52,
+          "w": 3.52,
+          "d": 4.13,
+          "material": "mikrosement",
+          "color": "#d3d0ca"
+        },
+        {
+          "id": "rvhyvdh",
+          "name": "Trapp",
+          "x": 14.73,
+          "z": 4.52,
+          "w": 4.13,
+          "d": 1.94,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "r3syf38",
+          "name": "Gang",
+          "x": 14.73,
+          "z": 6.46,
+          "w": 2.92,
+          "d": 2.19,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "rin0con",
+          "name": "Gang",
+          "x": 14.73,
+          "z": 8.65,
+          "w": 1.31,
+          "d": 6.6,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "ruw02p4",
+          "name": "Gang",
+          "x": 11.21,
+          "z": 14.06,
+          "w": 3.52,
+          "d": 1.19,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "ruf9w3l",
+          "name": "Gang",
+          "x": 9.02,
+          "z": 13.48,
+          "w": 2.19,
+          "d": 1.77,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "rzb9fmu",
+          "name": "WC",
+          "x": 17.65,
+          "z": 6.46,
+          "w": 1.21,
+          "d": 2.19,
+          "material": "flis_gra",
+          "color": "#aeb4b5"
+        },
+        {
+          "id": "rnqbv0o",
+          "name": "Kjøkken",
+          "x": 11.21,
+          "z": 8.65,
+          "w": 3.52,
+          "d": 3.75,
+          "material": "flis_hvit",
+          "color": "#d4b27e"
+        },
+        {
+          "id": "r9juyrg",
+          "name": "Kjøkken",
+          "x": 11.21,
+          "z": 12.4,
+          "w": 1.81,
+          "d": 1.67,
+          "material": "flis_hvit",
+          "color": "#d4b27e"
+        },
+        {
+          "id": "rho0veu",
+          "name": "Bad",
+          "x": 13.02,
+          "z": 12.4,
+          "w": 1.71,
+          "d": 1.67,
+          "material": "flis_gra",
+          "color": "#aeb4b5"
+        },
+        {
+          "id": "r5h3wxs",
+          "name": "Soverom",
+          "x": 16.04,
+          "z": 8.65,
+          "w": 2.81,
+          "d": 3.75,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "r729zrm",
+          "name": "Soverom",
+          "x": 16.04,
+          "z": 12.4,
+          "w": 2.81,
+          "d": 2.85,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "rw9ujam",
+          "name": "Trapp",
+          "x": 11.21,
+          "z": 15.25,
+          "w": 1.19,
+          "d": 4.06,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "r5c5kv8",
+          "name": "Soverom",
+          "x": 12.4,
+          "z": 15.25,
+          "w": 2.25,
+          "d": 4.06,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "roipxds",
+          "name": "Soverom",
+          "x": 14.65,
+          "z": 15.25,
+          "w": 4.21,
+          "d": 4.06,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "r4dpin6",
+          "name": "Stue",
+          "x": 0,
+          "z": 13.48,
+          "w": 4.69,
+          "d": 5.83,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "rgn75md",
+          "name": "Gang",
+          "x": 4.69,
+          "z": 13.48,
+          "w": 4.33,
+          "d": 2.42,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "rjwt8rh",
+          "name": "Gang",
+          "x": 7.23,
+          "z": 15.9,
+          "w": 1.79,
+          "d": 0.71,
+          "material": "eik",
+          "color": "#c08a55"
+        },
+        {
+          "id": "ri6b245",
+          "name": "Soverom",
+          "x": 4.69,
+          "z": 15.9,
+          "w": 2.54,
+          "d": 3.42,
+          "material": "eik",
+          "color": "#c8a57a"
+        },
+        {
+          "id": "rvoipwz",
+          "name": "Bad",
+          "x": 7.23,
+          "z": 16.6,
+          "w": 1.79,
+          "d": 2.71,
+          "material": "flis_gra",
+          "color": "#aeb4b5"
+        },
+        {
+          "id": "ri498li",
+          "name": "Kjøkken",
+          "x": 9.02,
+          "z": 15.25,
+          "w": 2.19,
+          "d": 4.06,
+          "material": "flis_hvit",
+          "color": "#d4b27e"
+        }
+      ],
+      "walls": [
+        {
+          "id": "webwobj",
+          "x1": 8.9,
+          "z1": 0,
+          "x2": 18.85,
+          "z2": 0,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "o952vyc",
+              "type": "window",
+              "pos": 1.19,
+              "width": 1.3,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "o28o6r5",
+              "type": "window",
+              "pos": 4.75,
+              "width": 2.7,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "w276me9",
+          "x1": 18.85,
+          "z1": 0,
+          "x2": 18.85,
+          "z2": 4.06,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": []
+        },
+        {
+          "id": "w9veokb",
+          "x1": 18.85,
+          "z1": 4.06,
+          "x2": 19.58,
+          "z2": 4.06,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": []
+        },
+        {
+          "id": "w8pwx5f",
+          "x1": 19.58,
+          "z1": 4.06,
+          "x2": 19.58,
+          "z2": 6.46,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "ocrmyaj",
+              "type": "window",
+              "pos": 1.15,
+              "width": 1.45,
+              "height": 1.9,
+              "sill": 0.4,
+              "material": "eik",
+              "color": "#b98a4e"
+            }
+          ]
+        },
+        {
+          "id": "wplijki",
+          "x1": 19.58,
+          "z1": 6.46,
+          "x2": 18.85,
+          "z2": 6.46,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": []
+        },
+        {
+          "id": "wmm5rxv",
+          "x1": 18.85,
+          "z1": 6.46,
+          "x2": 18.85,
+          "z2": 19.31,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "orej204",
+              "type": "window",
+              "pos": 1.29,
+              "width": 0.8,
+              "height": 0.9,
+              "sill": 1.2,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "opcxx1h",
+              "type": "window",
+              "pos": 4.33,
+              "width": 1.3,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "odyatn6",
+              "type": "window",
+              "pos": 7.23,
+              "width": 1.35,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "w6qpdd2",
+          "x1": 18.85,
+          "z1": 19.31,
+          "x2": 0,
+          "z2": 19.31,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "oe868ag",
+              "type": "window",
+              "pos": 2.27,
+              "width": 1.3,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "ondscnd",
+              "type": "window",
+              "pos": 5.06,
+              "width": 1.25,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "orsgmt4",
+              "type": "window",
+              "pos": 8.83,
+              "width": 1.3,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "olr3jgz",
+              "type": "window",
+              "pos": 10.71,
+              "width": 1,
+              "height": 1,
+              "sill": 1.1,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "ojdqjgx",
+              "type": "window",
+              "pos": 12.56,
+              "width": 1.35,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "w4xicib",
+          "x1": 0,
+          "z1": 19.31,
+          "x2": 0,
+          "z2": 13.48,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "oy1eohd",
+              "type": "window",
+              "pos": 4.69,
+              "width": 1.5,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "wojmo4j",
+          "x1": 0,
+          "z1": 13.48,
+          "x2": 11.21,
+          "z2": 13.48,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "o7bq6s2",
+              "type": "window",
+              "pos": 1.5,
+              "width": 2.4,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "o1458lr",
+              "type": "door",
+              "pos": 3.27,
+              "width": 0.9,
+              "height": 2.1,
+              "sill": 0,
+              "material": "maling",
+              "color": "#cf6a3d",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "ohqusoz",
+              "type": "window",
+              "pos": 6.31,
+              "width": 1.3,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "wte30d2",
+          "x1": 11.21,
+          "z1": 13.48,
+          "x2": 11.21,
+          "z2": 4.52,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "o25jr2w",
+              "type": "window",
+              "pos": 2.06,
+              "width": 1.3,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "o2edr11",
+              "type": "window",
+              "pos": 3.42,
+              "width": 1.2,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "o21afxx",
+              "type": "window",
+              "pos": 6.13,
+              "width": 1.1,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            },
+            {
+              "id": "oo4zjrj",
+              "type": "window",
+              "pos": 7.38,
+              "width": 1.1,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "wdulgd8",
+          "x1": 11.21,
+          "z1": 4.52,
+          "x2": 8.9,
+          "z2": 4.52,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "o584ikn",
+              "type": "door",
+              "pos": 1.63,
+              "width": 0.9,
+              "height": 2.1,
+              "sill": 0,
+              "material": "maling",
+              "color": "#cf6a3d",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "w9qak19",
+          "x1": 8.9,
+          "z1": 4.52,
+          "x2": 8.9,
+          "z2": 0,
+          "thickness": 0.25,
+          "exterior": true,
+          "material": "panel_beiset",
+          "color": "#3b2a21",
+          "openings": [
+            {
+              "id": "o3qpilp",
+              "type": "window",
+              "pos": 2.71,
+              "width": 2.4,
+              "height": 1.3,
+              "sill": 0.8,
+              "material": "maling",
+              "color": "#cf6a3d"
+            }
+          ]
+        },
+        {
+          "id": "wx0kz4k",
+          "x1": 14.73,
+          "z1": 5.31,
+          "x2": 14.73,
+          "z2": 14.06,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "o1j5475",
+              "type": "door",
+              "pos": 5.4,
+              "width": 0.85,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 60,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "we0xyzr",
+          "x1": 14.73,
+          "z1": 6.46,
+          "x2": 18.85,
+          "z2": 6.46,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "ofj08bk",
+              "type": "door",
+              "pos": 1.31,
+              "width": 0.85,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 45,
+              "swing": "right"
+            }
+          ]
+        },
+        {
+          "id": "wo4c0zy",
+          "x1": 17.65,
+          "z1": 6.46,
+          "x2": 17.65,
+          "z2": 8.65,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "orifmr0",
+              "type": "door",
+              "pos": 0.73,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wo7w1ti",
+          "x1": 11.21,
+          "z1": 8.65,
+          "x2": 14.73,
+          "z2": 8.65,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "obty19h",
+              "type": "door",
+              "pos": 1.73,
+              "width": 0.85,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 70,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "w7elkut",
+          "x1": 16.04,
+          "z1": 8.65,
+          "x2": 18.85,
+          "z2": 8.65,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wqhoxt8",
+          "x1": 16.04,
+          "z1": 12.4,
+          "x2": 18.85,
+          "z2": 12.4,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "w2e6z41",
+          "x1": 16.04,
+          "z1": 8.65,
+          "x2": 16.04,
+          "z2": 15.25,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "oojr17g",
+              "type": "door",
+              "pos": 1.73,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "o116owe",
+              "type": "door",
+              "pos": 4.38,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wcjqwbi",
+          "x1": 13.02,
+          "z1": 12.4,
+          "x2": 14.73,
+          "z2": 12.4,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wxa786m",
+          "x1": 13.02,
+          "z1": 12.4,
+          "x2": 13.02,
+          "z2": 14.06,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wmh2ivg",
+          "x1": 11.21,
+          "z1": 14.06,
+          "x2": 14.73,
+          "z2": 14.06,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "osq0c6u",
+              "type": "door",
+              "pos": 1.19,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 50,
+              "swing": "left"
+            },
+            {
+              "id": "odu50ti",
+              "type": "door",
+              "pos": 2.69,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "w01j5tz",
+          "x1": 12.4,
+          "z1": 15.25,
+          "x2": 18.85,
+          "z2": 15.25,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "o1kp65s",
+              "type": "door",
+              "pos": 1.56,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            },
+            {
+              "id": "o2dyb27",
+              "type": "door",
+              "pos": 3.02,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wdimfen",
+          "x1": 12.4,
+          "z1": 15.25,
+          "x2": 12.4,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wr20jol",
+          "x1": 14.65,
+          "z1": 15.25,
+          "x2": 14.65,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wg5zio5",
+          "x1": 11.21,
+          "z1": 13.48,
+          "x2": 11.21,
+          "z2": 15.25,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "owq3dx9",
+              "type": "door",
+              "pos": 1.21,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wkxtk3c",
+          "x1": 9.02,
+          "z1": 15.25,
+          "x2": 11.21,
+          "z2": 15.25,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "whe30kj",
+          "x1": 9.02,
+          "z1": 13.48,
+          "x2": 9.02,
+          "z2": 15.25,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "or4eih1",
+              "type": "door",
+              "pos": 0.9,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "w7g4a89",
+          "x1": 9.02,
+          "z1": 15.25,
+          "x2": 9.02,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "om2bhre",
+              "type": "door",
+              "pos": 0.83,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 90,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "w6z2qiw",
+          "x1": 4.69,
+          "z1": 14.69,
+          "x2": 4.69,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "ophljhy",
+              "type": "door",
+              "pos": 3.38,
+              "width": 0.8,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        },
+        {
+          "id": "wsif40a",
+          "x1": 4.69,
+          "z1": 15.9,
+          "x2": 7.23,
+          "z2": 15.9,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wyr9hpq",
+          "x1": 7.23,
+          "z1": 15.9,
+          "x2": 7.23,
+          "z2": 19.31,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": []
+        },
+        {
+          "id": "wbdkzs9",
+          "x1": 7.23,
+          "z1": 16.6,
+          "x2": 9.02,
+          "z2": 16.6,
+          "thickness": 0.1,
+          "exterior": false,
+          "material": "maling",
+          "color": "#ebe6dd",
+          "openings": [
+            {
+              "id": "ogihkqt",
+              "type": "door",
+              "pos": 1,
+              "width": 0.7,
+              "height": 2.05,
+              "sill": 0,
+              "material": "eik",
+              "color": "#c8945e",
+              "open": 0,
+              "swing": "left"
+            }
+          ]
+        }
+      ],
+      "furniture": [
+        {
+          "id": "mfuhcct",
+          "type": "sofa",
+          "x": 18.325,
+          "z": 2.29,
+          "rot": -90,
+          "w": 2.6,
+          "d": 0.95,
+          "h": 0.8,
+          "material": "stoff",
+          "color": "#d6d4cf"
+        },
+        {
+          "id": "m8cehyf",
+          "type": "sofa",
+          "x": 17.29,
+          "z": 0.535,
+          "rot": 0,
+          "w": 1.9,
+          "d": 0.95,
+          "h": 0.8,
+          "material": "stoff",
+          "color": "#d6d4cf"
+        },
+        {
+          "id": "m07lw6g",
+          "type": "sofa",
+          "x": 15.63,
+          "z": 2.71,
+          "rot": 90,
+          "w": 2,
+          "d": 0.95,
+          "h": 0.8,
+          "material": "stoff",
+          "color": "#f2f1ee"
+        },
+        {
+          "id": "m3u1hek",
+          "type": "bord",
+          "x": 16.77,
+          "z": 2.5,
+          "rot": 0,
+          "w": 1.1,
+          "d": 0.6,
+          "h": 0.45,
+          "material": "maling",
+          "color": "#f0efeb"
+        },
+        {
+          "id": "mtqqkvw",
+          "type": "lampe",
+          "x": 18.44,
+          "z": 3.85,
+          "rot": 0,
+          "w": 0.35,
+          "d": 0.35,
+          "h": 1.8,
+          "material": "metall",
+          "color": "#e9e6df"
+        },
+        {
+          "id": "mrpsp4a",
+          "type": "annet",
+          "x": 14.295,
+          "z": 4.94,
+          "rot": 0,
+          "w": 0.75,
+          "d": 0.7,
+          "h": 2.6,
+          "material": "tegl",
+          "color": "#efefea"
+        },
+        {
+          "id": "m3ond3u",
+          "type": "annet",
+          "x": 14.42,
+          "z": 5.46,
+          "rot": 180,
+          "w": 0.45,
+          "d": 0.45,
+          "h": 1.1,
+          "material": "metall",
+          "color": "#1d1d1d"
+        },
+        {
+          "id": "m2co6j1",
+          "type": "bord",
+          "x": 13.02,
+          "z": 6.77,
+          "rot": 90,
+          "w": 1.8,
+          "d": 0.95,
+          "h": 0.75,
+          "material": "metall",
+          "color": "#d9e3e3"
+        },
+        {
+          "id": "masnnd6",
+          "type": "stol",
+          "x": 12.56,
+          "z": 6.04,
+          "rot": 90,
+          "w": 0.55,
+          "d": 0.55,
+          "h": 0.85,
+          "material": "stoff",
+          "color": "#b8b8b5"
+        },
+        {
+          "id": "m81y4pc",
+          "type": "stol",
+          "x": 12.56,
+          "z": 6.77,
+          "rot": 90,
+          "w": 0.55,
+          "d": 0.55,
+          "h": 0.85,
+          "material": "stoff",
+          "color": "#b8b8b5"
+        },
+        {
+          "id": "mt3nd4h",
+          "type": "stol",
+          "x": 12.56,
+          "z": 7.5,
+          "rot": 90,
+          "w": 0.55,
+          "d": 0.55,
+          "h": 0.85,
+          "material": "stoff",
+          "color": "#b8b8b5"
+        },
+        {
+          "id": "mur3dwm",
+          "type": "stol",
+          "x": 13.48,
+          "z": 6.04,
+          "rot": -90,
+          "w": 0.55,
+          "d": 0.55,
+          "h": 0.85,
+          "material": "stoff",
+          "color": "#b8b8b5"
+        },
+        {
+          "id": "m42da5p",
+          "type": "stol",
+          "x": 13.48,
+          "z": 6.77,
+          "rot": -90,
+          "w": 0.55,
+          "d": 0.55,
+          "h": 0.85,
+          "material": "stoff",
+          "color": "#b8b8b5"
+        },
+        {
+          "id": "m4mjxu4",
+          "type": "stol",
+          "x": 13.48,
+          "z": 7.5,
+          "rot": -90,
+          "w": 0.55,
+          "d": 0.55,
+          "h": 0.85,
+          "material": "stoff",
+          "color": "#b8b8b5"
+        },
+        {
+          "id": "m2uk4ce",
+          "type": "kjokken",
+          "x": 11.57,
+          "z": 10.52,
+          "rot": 90,
+          "w": 3.45,
+          "d": 0.6,
+          "h": 0.9,
+          "material": "eik",
+          "color": "#e2cc9f"
+        },
+        {
+          "id": "m3wy59k",
+          "type": "kjokken",
+          "x": 11.57,
+          "z": 13.23,
+          "rot": 90,
+          "w": 1.4,
+          "d": 0.6,
+          "h": 0.9,
+          "material": "eik",
+          "color": "#e2cc9f"
+        },
+        {
+          "id": "m584m0x",
+          "type": "skap",
+          "x": 11.52,
+          "z": 10.63,
+          "rot": 90,
+          "w": 2.2,
+          "d": 0.35,
+          "h": 0.7,
+          "material": "eik",
+          "color": "#e2cc9f"
+        },
+        {
+          "id": "muxinfu",
+          "type": "kjokken",
+          "x": 13.82,
+          "z": 12.04,
+          "rot": 180,
+          "w": 1.7,
+          "d": 0.6,
+          "h": 0.9,
+          "material": "maling",
+          "color": "#6f988f"
+        },
+        {
+          "id": "mpak4ne",
+          "type": "skap",
+          "x": 13.82,
+          "z": 12.165,
+          "rot": 180,
+          "w": 1.7,
+          "d": 0.35,
+          "h": 2.25,
+          "material": "maling",
+          "color": "#6f988f"
+        },
+        {
+          "id": "mnzuro8",
+          "type": "kjokken",
+          "x": 10.85,
+          "z": 16.98,
+          "rot": -90,
+          "w": 3,
+          "d": 0.6,
+          "h": 0.9,
+          "material": "maling",
+          "color": "#e6e1d6"
+        },
+        {
+          "id": "mt3zz9a",
+          "type": "toalett",
+          "x": 18.25,
+          "z": 8.19,
+          "rot": 180,
+          "w": 0.4,
+          "d": 0.65,
+          "h": 0.8,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "m8qdi03",
+          "type": "vask",
+          "x": 18.25,
+          "z": 6.77,
+          "rot": 0,
+          "w": 0.5,
+          "d": 0.4,
+          "h": 0.85,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "mqe2ae5",
+          "type": "toalett",
+          "x": 13.38,
+          "z": 13.71,
+          "rot": 180,
+          "w": 0.4,
+          "d": 0.6,
+          "h": 0.8,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "mha85xc",
+          "type": "vask",
+          "x": 14.42,
+          "z": 12.81,
+          "rot": -90,
+          "w": 0.5,
+          "d": 0.4,
+          "h": 0.85,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "mjqyah9",
+          "type": "dusj",
+          "x": 14.27,
+          "z": 13.61,
+          "rot": 180,
+          "w": 0.8,
+          "d": 0.8,
+          "h": 2,
+          "material": "flis_hvit",
+          "color": "#dfe6e8"
+        },
+        {
+          "id": "mam7x1s",
+          "type": "toalett",
+          "x": 7.65,
+          "z": 18.02,
+          "rot": 90,
+          "w": 0.4,
+          "d": 0.65,
+          "h": 0.8,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "mjs4al0",
+          "type": "vask",
+          "x": 7.5,
+          "z": 17.19,
+          "rot": 90,
+          "w": 0.5,
+          "d": 0.4,
+          "h": 0.85,
+          "material": "flis_hvit",
+          "color": "#f4f2ee"
+        },
+        {
+          "id": "m94x63l",
+          "type": "dusj",
+          "x": 8.56,
+          "z": 18.85,
+          "rot": -90,
+          "w": 0.8,
+          "d": 0.8,
+          "h": 2,
+          "material": "flis_hvit",
+          "color": "#dfe6e8"
+        },
+        {
+          "id": "m4jw85k",
+          "type": "skap",
+          "x": 15.01,
+          "z": 17.29,
+          "rot": 90,
+          "w": 3.4,
+          "d": 0.6,
+          "h": 2.1,
+          "material": "maling",
+          "color": "#ece8df"
+        },
+        {
+          "id": "mf1um8w",
+          "type": "skap",
+          "x": 16.88,
+          "z": 14.94,
+          "rot": 180,
+          "w": 1.4,
+          "d": 0.5,
+          "h": 2,
+          "material": "maling",
+          "color": "#ece8df"
+        },
+        {
+          "id": "m5pzwzn",
+          "type": "skap",
+          "x": 5.025,
+          "z": 18.81,
+          "rot": 90,
+          "w": 0.9,
+          "d": 0.55,
+          "h": 2,
+          "material": "maling",
+          "color": "#ece8df"
+        },
+        {
+          "id": "mwe6us7",
+          "type": "annet",
+          "x": 5.05,
+          "z": 15.54,
+          "rot": 0,
+          "w": 0.6,
+          "d": 0.6,
+          "h": 2.6,
+          "material": "tegl",
+          "color": "#efefea"
+        }
+      ]
+    }
+  ],
+  "roof": {
+    "type": "flat",
+    "pitch": 5,
+    "overhang": 0.5,
+    "material": "betong",
+    "color": "#8d8f8d"
+  }
+}
