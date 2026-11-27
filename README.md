@@ -20,7 +20,14 @@ node server.js
 
 **Uten API-nøkkel** vises demohuset, og alt unntatt bildetolkning virker. Det gjelder også når filene legges rett på en statisk vert som GitHub Pages.
 **Med egne bilder:** lag `.env` med `ANTHROPIC_API_KEY=...` (valgfritt `CLAUDE_MODEL`, `PORT`, `HOST`). Nøkkelen brukes bare på serveren. Hvert hus koster penger hos Anthropic.
-Serveren har ingen innlogging. Legger du den åpent på nettet, kan alle som finner den bruke nøkkelen din.
+
+**Før lenken deles** har `/api/analyze` et vern mot misbruk og kostnader (ingen innlogging, ingen ekstra pakker):
+- Høyst 3 hus per nettverksadresse per døgn (`PER_IP_LIMIT`). IPv6-adresser regnes per /64-blokk.
+- Høyst 20 hus totalt per døgn for alle brukerne til sammen (`DAILY_LIMIT`). `DAILY_LIMIT=0` slår av bildetolkningen.
+- Valgfri tilgangskode: `ACCESS_CODE=...`. Appen spør om koden før opplasting og husker den på enheten. Etter 10 feil koder fra samme adresse stenges den adressen ut døgnet.
+- Døgnet følger norsk tid og nullstilles ved midnatt. Tellingen lagres i `.husform-usage.json` (eller `USAGE_FILE`), så en omstart ikke nullstiller den. Adressene lagres bare som hash.
+- Et hus telles når Claude spørres. Feiler det før Claude begynner å svare, telles det ikke.
+- Bak en mellomtjener (Fly, nginx, Cloudflare): sett `TRUST_PROXY` til antall mellomtjenere foran serveren, vanligvis `1`. Ellers ser serveren bare mellomtjenerens adresse, og alle deler de samme 3 husene. Uten mellomtjener skal den stå tom, ellers kan grensen omgås. På Render og Railway er `TRUST_PROXY=1` standard.
 
 ## Legg ut på nett
 Appen kjører som en vanlig Node-tjeneste på Render eller Railway. Oppsettet ligger i repoet: `render.yaml` (Render) og `railway.json` (Railway). Begge starter `node server.js` og bruker helsesjekken `GET /healthz`, som svarer `{"ok":true,"ai":true|false}` uten å kalle Claude.
@@ -34,7 +41,7 @@ Verten setter `PORT`. Serveren lytter da på `0.0.0.0` (alle grensesnitt) på Re
 
 Sjekk etterpå at `https://<adressen>/healthz` svarer med `"ai":true`. Med `"ai":false` mangler nøkkelen, og appen viser bare demohuset.
 
-**Obs:** serveren har ingen innlogging. Alle som har adressen, kan tolke bilder på din regning. Sett gjerne en månedlig utgiftsgrense i Anthropic Console.
+**Obs:** serveren har ingen innlogging. Grensene over (og gjerne `ACCESS_CODE`) begrenser hvor mye andre kan tolke på din regning. Sett i tillegg en månedlig utgiftsgrense i Anthropic Console.
 
 ## Test
 ```bash
