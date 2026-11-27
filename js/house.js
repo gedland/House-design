@@ -9,35 +9,72 @@
 //   }],                                                                 // height = gulv til gulv (øverste etasje: vegghøyde opp til takfoten)
 //   roof: { type: 'gable'|'hip'|'flat', pitch, overhang, material, color } | null
 // }
+// material = en nøkkel i MATERIALS (under). color = hex-farge som farger materialets tekstur, så alt kan få hvilken som helst farge.
+// Materialene. Hvert materiale har en PBR-tekstur (js/scene.js), en ruhet og en standardfarge. Fargen i JSON farger teksturen,
+// så hvitmalt panel med rød farge blir rødmalt panel. Standardfargen brukes når brukeren bytter materiale.
 export const MATERIALS = {
-  maling: { label: 'Maling', rough: .9 }, tre: { label: 'Tre', rough: .7 }, panel: { label: 'Trepanel', rough: .8 },
-  betong: { label: 'Betong', rough: .95 }, flis: { label: 'Flis', rough: .35 }, murstein: { label: 'Murstein', rough: .9 },
-  tekstil: { label: 'Tekstil', rough: 1 }, metall: { label: 'Metall', rough: .35, metal: .8 }, takstein: { label: 'Takstein', rough: .8 },
+  maling: { label: 'Maling', rough: .85, color: '#f1eee7' },
+  puss: { label: 'Puss', rough: .95, color: '#ece9e2' },
+  mikrosement: { label: 'Mikrosement', rough: .6, color: '#c4beb3' },
+  betong: { label: 'Betong', rough: .9, color: '#a9a69f' },
+  eik: { label: 'Eik', rough: .6, color: '#c49a6c' },
+  furu: { label: 'Furu', rough: .65, color: '#dcb27a' },
+  parkett_hvit: { label: 'Hvitlasert parkett', rough: .55, color: '#e6ddcf' },
+  flis_hvit: { label: 'Hvit flis', rough: .2, color: '#f3f2ef' },
+  flis_gra: { label: 'Grå flis', rough: .45, color: '#8f8e8a' },
+  panel_hvit: { label: 'Hvitmalt panel', rough: .7, color: '#f0eee8' },
+  panel_beiset: { label: 'Beiset panel', rough: .85, color: '#6e4d36' },
+  tegl: { label: 'Teglstein', rough: .9, color: '#a5563d' },
+  betongtakstein: { label: 'Betongtakstein', rough: .8, color: '#3a3a3c' },
+  skifer: { label: 'Skifer', rough: .65, color: '#4b4f53' },
+  stoff: { label: 'Stoff', rough: 1, color: '#7d8a80' },
+  laer: { label: 'Lær', rough: .5, color: '#6b4430' },
+  metall: { label: 'Metall', rough: .35, metal: .8, color: '#b9b9b4' },
 };
+// Gjør hvilken som helst materialangivelse om til en nøkkel i MATERIALS: nøkkelen selv, navnet («Hvit flis»), gamle
+// nøkler fra før teksturene (tre → eik osv.) og vanlige ord på norsk og engelsk. Fliser blir grå når fargen er mørk.
+const OLD = { tre: 'eik', panel: 'panel_hvit', trepanel: 'panel_hvit', murstein: 'tegl', takstein: 'betongtakstein', tekstil: 'stoff' };
+const WORDS = [
+  [/metal|stål|steel|alu|jern|iron|krom|chrome/, 'metall'], [/beis|stain|oljet/, 'panel_beiset'], [/panel|kledning|cladding|siding/, 'panel_hvit'], [/hvitlas|whitewash|hvitpigment/, 'parkett_hvit'],
+  [/furu|pine/, 'furu'], [/eik|oak|tre|wood|parkett|parquet|laminat|plank|gulvbord/, 'eik'], [/mikro|micro/, 'mikrosement'],
+  [/takstein|takpanne|roof.?tile/, 'betongtakstein'], [/skifer|slate/, 'skifer'], [/flis|tile|keram|ceramic|klinker|porselen|porcelain/, 'flis'],
+  [/tegl|murstein|brick/, 'tegl'], [/puss|plaster|stucco|render/, 'puss'], [/betong|concrete|sement|cement/, 'betong'],
+  [/lær|laer|leather|skinn/, 'laer'], [/stoff|tekstil|fabric|textile|ull|wool|velour|fløyel|velvet|teppe|carpet/, 'stoff'],
+  [/mal|paint|gips|gypsum|tapet/, 'maling'],
+];
+const lum = c => /^#[0-9a-f]{6}$/i.test(c) ? [1, 3, 5].reduce((s, i, k) => s + parseInt(c.slice(i, i + 2), 16) / 255 * [.2126, .7152, .0722][k], 0) : 1;
+export function material(v, color, d) {
+  if (typeof v !== 'string') return d;
+  const s = v.trim().toLowerCase(), key = s.replace(/[\s-]+/g, '_').replace(/æ/g, 'ae').replace(/ø/g, 'o').replace(/å/g, 'a');
+  let k = MATERIALS[s] ? s : MATERIALS[key] ? key : OLD[s] || Object.keys(MATERIALS).find(m => MATERIALS[m].label.toLowerCase() === s)
+    || WORDS.find(([re]) => re.test(s))?.[1];
+  if (k === 'flis') k = lum(color) < .5 ? 'flis_gra' : 'flis_hvit';
+  return k || d;
+}
 export const FURNITURE = {
-  sofa: { label: 'Sofa', w: 2.1, d: .9, h: .8, material: 'tekstil', color: '#7d8a80' },
-  bord: { label: 'Bord', w: 1.2, d: .7, h: .45, material: 'tre', color: '#b08a5e' },
-  stol: { label: 'Stol', w: .5, d: .5, h: .9, material: 'tre', color: '#8c6a48' },
-  seng: { label: 'Seng', w: 1.6, d: 2, h: .9, material: 'tekstil', color: '#c9c3b6' },
-  skap: { label: 'Skap', w: 1, d: .45, h: 1.9, material: 'tre', color: '#e6e1d6' },
-  kjokken: { label: 'Kjøkkenbenk', w: 2.4, d: .6, h: .9, material: 'tre', color: '#e6e1d6' },
-  tv: { label: 'TV-benk', w: 1.6, d: .4, h: 1.2, material: 'tre', color: '#6b5a48' },
-  toalett: { label: 'Toalett', w: .4, d: .65, h: .8, material: 'flis', color: '#f4f2ee' },
-  vask: { label: 'Servant', w: .8, d: .45, h: .85, material: 'tre', color: '#e6e1d6' },
-  dusj: { label: 'Dusj', w: .9, d: .9, h: 2, material: 'flis', color: '#dfe6e8' },
+  sofa: { label: 'Sofa', w: 2.1, d: .9, h: .8, material: 'stoff', color: '#7d8a80' },
+  bord: { label: 'Bord', w: 1.2, d: .7, h: .45, material: 'eik', color: '#b08a5e' },
+  stol: { label: 'Stol', w: .5, d: .5, h: .9, material: 'eik', color: '#8c6a48' },
+  seng: { label: 'Seng', w: 1.6, d: 2, h: .9, material: 'stoff', color: '#c9c3b6' },
+  skap: { label: 'Skap', w: 1, d: .45, h: 1.9, material: 'maling', color: '#e6e1d6' },
+  kjokken: { label: 'Kjøkkenbenk', w: 2.4, d: .6, h: .9, material: 'maling', color: '#e6e1d6' },
+  tv: { label: 'TV-benk', w: 1.6, d: .4, h: 1.2, material: 'eik', color: '#6b5a48' },
+  toalett: { label: 'Toalett', w: .4, d: .65, h: .8, material: 'flis_hvit', color: '#f4f2ee' },
+  vask: { label: 'Servant', w: .8, d: .45, h: .85, material: 'maling', color: '#e6e1d6' },
+  dusj: { label: 'Dusj', w: .9, d: .9, h: 2, material: 'flis_hvit', color: '#dfe6e8' },
   lampe: { label: 'Lampe', w: .4, d: .4, h: 1.6, material: 'metall', color: '#d9c9a3' },
   plante: { label: 'Plante', w: .5, d: .5, h: 1.2, material: 'maling', color: '#4f7a4c' },
   annet: { label: 'Annet', w: .8, d: .8, h: .8, material: 'maling', color: '#b9b4a8' },
 };
-export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, material: 'tre', color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, material: 'maling', color: '#f2efe8' } };
+export const OPENINGS = { door: { label: 'Dør', width: .9, height: 2.1, sill: 0, material: 'eik', color: '#5a3b26' }, window: { label: 'Vindu', width: 1.2, height: 1.2, sill: .9, material: 'maling', color: '#f2efe8' } };
 export const ROOFS = { gable: 'Saltak', hip: 'Valmtak', flat: 'Flatt tak' };
 export const uid = p => p + Math.random().toString(36).slice(2, 8);
 export const round = v => Math.round(v * 1000) / 1000;
 
 const P = '#e9e4d8', I = '#f1eee7', WF = '#f2efe8';
 const win = (pos, width = 1.2, height = 1.2, sill = .9) => ({ type: 'window', pos, width, height, sill, material: 'maling', color: WF });
-const door = (pos, color = '#efece6') => ({ type: 'door', pos, width: .9, height: 2.1, sill: 0, material: 'tre', color });
-const outer = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .2, exterior: true, material: 'panel', color: P, openings });
+const door = (pos, color = '#efece6') => ({ type: 'door', pos, width: .9, height: 2.1, sill: 0, material: 'eik', color });
+const outer = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .2, exterior: true, material: 'panel_hvit', color: P, openings });
 const inner = (x1, z1, x2, z2, openings) => ({ x1, z1, x2, z2, thickness: .1, exterior: false, material: 'maling', color: I, openings });
 const item = (type, x, z, rot = 0, o = {}) => ({ ...FURNITURE[type], label: undefined, type, x, z, rot, ...o });
 const DEMO_RAW = {
@@ -45,11 +82,11 @@ const DEMO_RAW = {
   floors: [{
     name: '1. etasje', height: 2.4,
     rooms: [
-      { name: 'Stue', x: 0, z: 0, w: 5.5, d: 4, material: 'tre', color: '#c8a57a' },
-      { name: 'Kjøkken', x: 5.5, z: 0, w: 3.5, d: 4, material: 'tre', color: '#c8a57a' },
-      { name: 'Bad', x: 0, z: 4, w: 3, d: 3, material: 'flis', color: '#aeb4b5' },
-      { name: 'Gang', x: 3, z: 4, w: 2.5, d: 3, material: 'flis', color: '#8d8a84' },
-      { name: 'Soverom', x: 5.5, z: 4, w: 3.5, d: 3, material: 'tre', color: '#c8a57a' },
+      { name: 'Stue', x: 0, z: 0, w: 5.5, d: 4, material: 'eik', color: '#c8a57a' },
+      { name: 'Kjøkken', x: 5.5, z: 0, w: 3.5, d: 4, material: 'eik', color: '#c8a57a' },
+      { name: 'Bad', x: 0, z: 4, w: 3, d: 3, material: 'flis_gra', color: '#aeb4b5' },
+      { name: 'Gang', x: 3, z: 4, w: 2.5, d: 3, material: 'flis_gra', color: '#8d8a84' },
+      { name: 'Soverom', x: 5.5, z: 4, w: 3.5, d: 3, material: 'eik', color: '#c8a57a' },
     ],
     walls: [
       outer(0, 7, 9, 7, [win(1.5, .6, .6, 1.4), door(4.25, '#5a3b26'), win(7.25, 1.4)]),
@@ -69,7 +106,7 @@ const DEMO_RAW = {
       item('skap', 5.2, 6.2, -90, { w: 1.2, d: .4 }),
     ],
   }],
-  roof: { type: 'gable', pitch: 30, overhang: .4, material: 'takstein', color: '#3a3a3c' },
+  roof: { type: 'gable', pitch: 30, overhang: .4, material: 'betongtakstein', color: '#3a3a3c' },
 };
 
 export const wallLength = w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1);
@@ -81,7 +118,7 @@ const point = p => Array.isArray(p) ? [pick(p[0]), pick(p[1])] : p && typeof p =
 function adapt(f) {
   if (!f || typeof f !== 'object') return {};
   const list = a => Array.isArray(a) ? a.filter(o => o && typeof o === 'object') : [], isDoor = o => /door|dør/i.test(o.type);
-  const rooms = list(f.rooms).map(r => ({ ...(!r.material && !r.color && /bad|bath|vask|utility|laundry|wc|toalett|dusj/i.test(`${r.type} ${r.name}`) ? { material: 'flis', color: '#aeb4b5' } : {}),
+  const rooms = list(f.rooms).map(r => ({ ...(!r.material && !r.color && /bad|bath|vask|utility|laundry|wc|toalett|dusj/i.test(`${r.type} ${r.name}`) ? { material: 'flis_gra', color: '#aeb4b5' } : {}),
     ...r, z: pick(r.z, r.y), w: pick(r.w, r.width), d: pick(r.d, r.depth, r.length) }));
   const walls = list(f.walls).map(w => { const [ax, az] = point(w.start ?? w.from), [bx, bz] = point(w.end ?? w.to);
     return { ...w, x1: pick(w.x1, ax), z1: pick(w.z1, w.y1, az), x2: pick(w.x2, bx), z2: pick(w.z2, w.y2, bz), openings: list(w.openings).map(o => ({ ...o, pos: pick(o.pos, o.position, o.offset) })) }; });
@@ -100,19 +137,19 @@ export function normalize(h) {
   const seen = new Set();
   const id = (o, p) => { const v = typeof o.id === 'string' && o.id && !seen.has(o.id) ? o.id : uid(p); seen.add(v); return v; };
   const n = (v, d, min = -500, max = 500) => Math.min(max, Math.max(min, v !== null && v !== '' && isFinite(+v) ? round(+v) : d));
-  const col = (c, d) => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : d, mt = (v, d) => MATERIALS[v] ? v : d, arr = a => Array.isArray(a) ? a : [];
+  const col = (c, d) => /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : d, mt = (v, d, c) => material(v, c, d), arr = a => Array.isArray(a) ? a : [];
   const floors = arr(h?.floors).slice(0, 5).map(adapt).map((f, i) => ({
     id: id(f, 'f'), name: String(f.name || `${i + 1}. etasje`).slice(0, 40), height: n(f.height, 2.4, 1, 6),
-    rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'tre'), color: col(r.color, '#c8a57a') })),
-    walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), exterior: typeof w.exterior === 'boolean' ? w.exterior : +w.thickness >= .15, material: mt(w.material, 'maling'), color: col(w.color, P),
-      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), material: mt(o.material, d.material), color: col(o.color, d.color) }; }) }))
+    rooms: arr(f.rooms).map(r => ({ id: id(r, 'r'), name: String(r.name || 'Rom').slice(0, 40), x: n(r.x, 0), z: n(r.z, 0), w: n(r.w, 3, .5, 60), d: n(r.d, 3, .5, 60), material: mt(r.material, 'eik', r.color), color: col(r.color, '#c8a57a') })),
+    walls: arr(f.walls).map(w => ({ id: id(w, 'w'), x1: n(w.x1, 0), z1: n(w.z1, 0), x2: n(w.x2, 0), z2: n(w.z2, 0), thickness: n(w.thickness, .15, .05, .6), exterior: typeof w.exterior === 'boolean' ? w.exterior : +w.thickness >= .15, material: mt(w.material, 'maling', w.color), color: col(w.color, P),
+      openings: arr(w.openings).map(o => { const t = o.type === 'door' ? 'door' : 'window', d = OPENINGS[t]; return { id: id(o, 'o'), type: t, pos: n(o.pos, 1, 0, 200), width: n(o.width, d.width, .3, 12), height: n(o.height, d.height, .3, 5), sill: n(o.sill, d.sill, 0, 5), material: mt(o.material, d.material, o.color), color: col(o.color, d.color) }; }) }))
       .filter(w => Math.hypot(w.x2 - w.x1, w.z2 - w.z1) >= .1),
-    furniture: arr(f.furniture).map(m => { const t = FURNITURE[m.type] ? m.type : 'annet', d = FURNITURE[t]; return { id: id(m, 'm'), type: t, x: n(m.x, 0), z: n(m.z, 0), rot: n(m.rot, 0, -360, 360), w: n(m.w, d.w, .1, 12), d: n(m.d, d.d, .1, 12), h: n(m.h, d.h, .1, 5), material: mt(m.material, d.material), color: col(m.color, d.color) }; }),
+    furniture: arr(f.furniture).map(m => { const t = FURNITURE[m.type] ? m.type : 'annet', d = FURNITURE[t]; return { id: id(m, 'm'), type: t, x: n(m.x, 0), z: n(m.z, 0), rot: n(m.rot, 0, -360, 360), w: n(m.w, d.w, .1, 12), d: n(m.d, d.d, .1, 12), h: n(m.h, d.h, .1, 5), material: mt(m.material, d.material, m.color), color: col(m.color, d.color) }; }),
   }));
   if (!floors.length) throw new Error('Modellen inneholder ingen etasjer.');
   const r = h.roof;
   return { version: 1, name: String(h.name || 'Huset mitt').slice(0, 60), floors,
-    roof: r && typeof r === 'object' ? { type: ROOFS[r.type] ? r.type : 'gable', pitch: n(r.pitch, 30, 5, 60), overhang: n(r.overhang, .4, 0, 2), material: mt(r.material, 'takstein'), color: col(r.color, '#3a3a3c') } : null };
+    roof: r && typeof r === 'object' ? { type: ROOFS[r.type] ? r.type : 'gable', pitch: n(r.pitch, 30, 5, 60), overhang: n(r.overhang, .4, 0, 2), material: mt(r.material, 'betongtakstein', r.color), color: col(r.color, '#3a3a3c') } : null };
 }
 export const DEMO = normalize(DEMO_RAW);
 
@@ -303,7 +340,7 @@ function rings(walls) {
   }
   return out;
 }
-const wallLike = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1: round(x1), z1: round(z1), x2: round(x2), z2: round(z2), thickness: like?.thickness ?? .2, exterior: true, material: like?.material ?? 'panel', color: like?.color ?? P, openings: [] });
+const wallLike = (x1, z1, x2, z2, like) => ({ id: uid('w'), x1: round(x1), z1: round(z1), x2: round(x2), z2: round(z2), thickness: like?.thickness ?? .2, exterior: true, material: like?.material ?? 'panel_hvit', color: like?.color ?? P, openings: [] });
 
 // Samme vegg tegnet to ganger gir flimmer. Vegger som ligger på samme linje og overlapper, slås sammen.
 function mergeDoubles(f, fix) {
@@ -496,7 +533,7 @@ export function inspect(input, { final = false } = {}) {
     const rs = closeOutline(f, fix, bad, final); rejoin(f);
     checkRooms(f, rs, fix, bad); checkOpenings(f, fix); checkFurniture(f, fix);
   }
-  if (!house.roof) { house.roof = { type: 'gable', pitch: 30, overhang: .4, material: 'takstein', color: '#3a3a3c' }; fixed.push('Taket manglet og ble lagt til som saltak.'); }
+  if (!house.roof) { house.roof = { type: 'gable', pitch: 30, overhang: .4, material: 'betongtakstein', color: '#3a3a3c' }; fixed.push('Taket manglet og ble lagt til som saltak.'); }
   if (!house.floors.some(f => f.walls.some(w => w.exterior && w.openings.some(o => o.type === 'door')))) problems.push({ text: 'Huset har ingen ytterdør.', serious: false });
   return { house, fixed, problems };
 }
