@@ -241,8 +241,13 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/analyze') return req.method === 'POST' ? analyzeRoute(req, res) : send(res, 405, { error: 'Bruk POST.' });
   const name = url === '/' ? 'index.html' : url.slice(1);
   if (!(FILES.includes(name) || TEXTURE.test(name)) || req.method !== 'GET') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Ikke funnet'); }
-  const type = TYPES[name.split('.').pop()];
-  fs.readFile(path.join(__dirname, name), (err, buf) => { res.writeHead(err ? 404 : 200, { 'Content-Type': err ? 'text/plain; charset=utf-8' : type + (type.startsWith('image/') && type !== 'image/svg+xml' ? '' : '; charset=utf-8'), 'Cache-Control': 'no-cache' }); res.end(err ? 'Ikke funnet' : buf); });
+  const type = TYPES[name.split('.').pop()], binary = type.startsWith('image/') && type !== 'image/svg+xml';
+  // Appens filer revalideres hver gang (no-cache). Teksturene endres sjelden og er store, så de kan ligge en uke i nettleseren.
+  const cache = TEXTURE.test(name) ? 'public, max-age=604800' : 'no-cache';
+  fs.readFile(path.join(__dirname, name), (err, buf) => {
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end('Ikke funnet'); }
+    res.writeHead(200, { 'Content-Type': binary ? type : type + '; charset=utf-8', 'Cache-Control': cache }); res.end(buf);
+  });
 });
 // Verten setter PORT. På Render og Railway må serveren lytte på alle grensesnitt; lokalt bare på maskinen selv.
 const PORT = +E.PORT || 3000, HOST = E.HOST || (E.RENDER || E.RAILWAY_PROJECT_ID ? '0.0.0.0' : '127.0.0.1');
