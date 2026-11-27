@@ -1,6 +1,6 @@
 // Husform-server: serverer appen og POST /api/analyze (bilder → hus-JSON via Claude). Node 18+.
 // API-nøkkelen leses fra miljøet eller .env og forlater aldri serveren. Uten nøkkel svarer /api/status {ai:false} og appen viser demohuset.
-const http = require('http'), fs = require('fs'), path = require('path');
+const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 for (const f of ['.env', '.env.local']) try {
   for (const l of fs.readFileSync(path.join(__dirname, f), 'utf8').split(/\r?\n/)) {
     const m = /^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/.exec(l);
@@ -8,7 +8,8 @@ for (const f of ['.env', '.env.local']) try {
   }
 } catch {}
 const E = process.env, KEY = E.ANTHROPIC_API_KEY || '', MODEL = E.CLAUDE_MODEL || 'claude-opus-5-5';
-const fail = (status, error) => Object.assign(new Error(error), { status });
+// reason forteller appen hva den skal gjøre med feilen: 'code' (spør om tilgangskoden), 'locked', 'quota' eller 'full' (ingen flere hus i dag).
+const fail = (status, error, reason) => Object.assign(new Error(error), { status, reason });
 
 // Skjemaet Claude må svare i: en kort befaring (survey) og huset. Huset er det samme som øverst i js/house.js, uten id-er
 // (de lages av normalize). Befaringen tvinger frem arbeidsrekkefølgen og logges, så tolkningen kan feilsøkes.
@@ -185,6 +186,79 @@ async function analyze(images, on, signal) {
   return { house: result.house, report, survey: data.survey };
 }
 
+// Vern mot misbruk og kostnader, uten innlogging: hver nettverksadresse kan lage PER_IP_LIMIT hus per døgn (3), alle til sammen
+// DAILY_LIMIT (20, 0 stenger bildetolkningen), og med ACCESS_CODE satt må appen sende koden. Døgnet følger norsk tid og nullstilles ved midnatt.
+// Tellingen lagres i USAGE_FILE så en omstart ikke nullstiller den. Adressene lagres bare som hash med et salt som byttes hvert døgn.
+// Bak en mellomtjener (Render, Fly, nginx, Cloudflare) ser serveren bare mellomtjenerens adresse. Sett da TRUST_PROXY til antall
+// mellomtjenere foran serveren (vanligvis 1), så leses brukerens adresse fra X-Forwarded-For. Uten mellomtjener må den stå tom,
+// ellers kan hvem som helst late som de har en ny adresse.
+const int = (v, d) => v != null && v !== '' && isFinite(+v) ? Math.max(0, Math.floor(+v)) : d;
+const PER_IP = int(E.PER_IP_LIMIT, 3), DAILY = int(E.DAILY_LIMIT, 20), CODE = (E.ACCESS_CODE || '').trim();
+const HOPS = /^(true|ja|yes)$/i.test(E.TRUST_PROXY || '') ? 1 : int(E.TRUST_PROXY, 0), WRONG_MAX = 10;
+const USAGE_FILE = E.USAGE_FILE || path.join(__dirname, '.husform-usage.json');
+const today = () => { try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Oslo' }).format(new Date()); } catch { return new Date().toISOString().slice(0, 10); } };
+const fresh = () => ({ day: today(), salt: crypto.randomBytes(16).toString('hex'), total: 0, ips: {}, wrong: {} });
+let U = (() => { try { const u = JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8')); if (u.day === today() && u.salt && u.ips && u.wrong) return u; } catch {} return fresh(); })();
+let storeWarned = false;
+function store() {
+  try { fs.writeFileSync(USAGE_FILE + '.tmp', JSON.stringify(U)); fs.renameSync(USAGE_FILE + '.tmp', USAGE_FILE); }
+  catch (e) { if (!storeWarned) console.warn(`Husform: fikk ikke lagret tellingen i ${USAGE_FILE} (${e.message}). Den holdes bare i minnet og nullstilles ved omstart.`); storeWarned = true; }
+}
+const usage = () => { if (U.day !== today()) { U = fresh(); store(); } return U; };
+// IPv6: hele /64-blokken regnes som én adresse, siden én tilkobling vanligvis rår over hele blokken.
+function block64(ip) {
+  const [a, b] = ip.split('::'), head = a ? a.split(':') : [], tail = b ? b.split(':') : [];
+  const all = b == null ? head : [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
+  return all.slice(0, 4).map(x => (parseInt(x, 16) || 0).toString(16)).join(':') + '::/64';
+}
+let proxyWarned = false;
+function clientKey(req) {
+  let ip = req.socket.remoteAddress || '';
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (HOPS && fwd.length) ip = fwd[Math.max(0, fwd.length - HOPS)];
+  else if (fwd.length && !proxyWarned) { proxyWarned = true; console.warn('Husform: forespørslene kommer via en mellomtjener (X-Forwarded-For), men TRUST_PROXY er ikke satt. Da deler alle brukerne samme grense per adresse. Sett TRUST_PROXY=1 i .env.'); }
+  ip = ip.replace(/^::ffff:/i, '').replace(/%.*$/, '').toLowerCase();
+  if (ip.includes(':')) ip = block64(ip);
+  return crypto.createHash('sha256').update(U.salt + ip).digest('hex').slice(0, 16);
+}
+const digest = s => crypto.createHash('sha256').update(s).digest();
+// Kaster en feil hvis tilgangskoden mangler eller er feil. Feil koder telles, så koden ikke kan gjettes.
+function checkCode(req, key) {
+  if (!CODE) return;
+  const u = usage();
+  if ((u.wrong[key] || 0) >= WRONG_MAX) throw fail(429, 'For mange feil tilgangskoder fra denne nettverksadressen i dag. Prøv igjen etter midnatt.', 'locked');
+  let given = ''; try { given = decodeURIComponent(req.headers['x-access-code'] || '').trim(); } catch {}
+  if (!given) throw fail(401, 'Skriv inn tilgangskoden. Du får den av den som delte lenken.', 'code');
+  if (!crypto.timingSafeEqual(digest(given), digest(CODE))) {
+    u.wrong[key] = (u.wrong[key] || 0) + 1; store();
+    throw fail(403, 'Feil tilgangskode. Sjekk koden og prøv igjen.', 'code');
+  }
+}
+const left = key => { const u = usage(); return Math.max(0, Math.min(PER_IP - (u.ips[key] || 0), DAILY - u.total)); };
+function quotaError(key) {
+  const u = usage();
+  if (u.total >= DAILY) return fail(429, DAILY ? `Husform har laget ${DAILY} hus i dag, som er grensen for alle brukerne til sammen. Prøv igjen etter midnatt.` : 'Bildetolkning er slått av på denne serveren.', 'full');
+  if ((u.ips[key] || 0) >= PER_IP) return fail(429, `Det er laget ${PER_IP} hus fra denne nettverksadressen i dag, som er grensen. Prøv igjen etter midnatt.`, 'quota');
+}
+// Holder av et hus i tellingen før Claude spørres, så samtidige forespørsler ikke kan gå forbi grensen.
+// Returnerer en funksjon som gir huset tilbake, brukt når Claude ikke rakk å begynne på svaret.
+function reserve(key) {
+  const err = quotaError(key); if (err) throw err;
+  const u = usage(); u.total++; u.ips[key] = (u.ips[key] || 0) + 1; store();
+  console.log(`Husform: hus ${u.total} av ${DAILY} i dag.`);
+  return () => { const v = usage(); if (v !== u) return; v.total = Math.max(0, v.total - 1); v.ips[key] = Math.max(0, (v.ips[key] || 1) - 1); store(); };
+}
+// GET /api/status: { ai, code (krever tilgangskode), left (hus igjen i dag), limit, error?, reason? }. Appen sjekker her før opplasting.
+function status(req, res) {
+  const out = { ai: !!KEY, code: !!CODE, limit: PER_IP };
+  if (KEY) {
+    const key = clientKey(req);
+    out.left = left(key);
+    try { checkCode(req, key); const err = quotaError(key); if (err) throw err; } catch (e) { out.error = e.message; out.reason = e.reason; }
+  }
+  send(res, 200, out);
+}
+
 const TYPES = { html: 'text/html', css: 'text/css', js: 'text/javascript', json: 'application/manifest+json', svg: 'image/svg+xml', png: 'image/png' };
 const FILES = ['index.html', 'style.css', 'js/app.js', 'js/scene.js', 'js/house.js', 'manifest.json', 'service-worker.js', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 const send = (res, status, obj) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
@@ -218,23 +292,30 @@ async function analyzeRoute(req, res) {
     if (p.chars != null) { const t = Date.now(); if (t - last < 400) return; last = t; }
     line({ type: 'progress', ...p });
   };
+  let release;
   try {
     const { images } = await readBody(req);
     if (!KEY) throw fail(503, 'Serveren har ingen API-nøkkel. Legg ANTHROPIC_API_KEY=... i filen .env og start node server.js på nytt.');
+    const key = clientKey(req);
+    checkCode(req, key);
     if (!Array.isArray(images) || images.length < 5) throw fail(400, `Velg minst 5 bilder (fikk ${Array.isArray(images) ? images.length : 0}).`);
     if (images.length > 30) throw fail(400, `Du kan sende høyst 30 bilder (fikk ${images.length}).`);
+    release = reserve(key);
     const done = await analyze(images, on, ac.signal);
     if (started) line({ type: 'done', ...done }); else send(res, 200, done);
   } catch (e) {
+    // Feilet det før Claude begynte å svare, koster det (nesten) ingenting, og huset telles ikke. Avbryter brukeren, telles det,
+    // ellers kunne noen spørre Claude om og om igjen og avbryte rett før svaret.
+    if (release && !started && !ac.signal.aborted) release();
     if (!e.status) console.error(e);
     const error = e.status ? e.message : 'Uventet feil på serveren. Se loggen der serveren kjører.';
     if (ac.signal.aborted) return;
-    if (started) line({ type: 'error', error }); else send(res, e.status || 500, { error });
+    if (started) line({ type: 'error', error }); else send(res, e.status || 500, { error, reason: e.reason });
   } finally { clearInterval(beat); if (started) res.end(); }
 }
 const server = http.createServer(async (req, res) => {
   const url = req.url.split('?')[0];
-  if (url === '/api/status') return send(res, 200, { ai: !!KEY });
+  if (url === '/api/status') return status(req, res);
   if (url === '/api/analyze') return req.method === 'POST' ? analyzeRoute(req, res) : send(res, 405, { error: 'Bruk POST.' });
   const name = url === '/' ? 'index.html' : url.slice(1);
   if (!FILES.includes(name) || req.method !== 'GET') { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Ikke funnet'); }
@@ -242,4 +323,7 @@ const server = http.createServer(async (req, res) => {
   fs.readFile(path.join(__dirname, name), (err, buf) => { res.writeHead(err ? 500 : 200, { 'Content-Type': type + (type.startsWith('image/png') ? '' : '; charset=utf-8'), 'Cache-Control': 'no-cache' }); res.end(err ? 'Feil' : buf); });
 });
 const PORT = +E.PORT || 3000, HOST = E.HOST || '127.0.0.1';
-server.listen(PORT, HOST, () => console.log(`Husform: http://localhost:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`));
+server.listen(PORT, HOST, () => {
+  console.log(`Husform: http://localhost:${PORT} (${KEY ? `bilder tolkes med ${MODEL} – koster penger per hus` : 'ingen API-nøkkel, bare demohus'})`);
+  if (KEY) console.log(`Husform: høyst ${PER_IP} hus per nettverksadresse og ${DAILY} hus totalt per døgn, ${CODE ? 'tilgangskode kreves' : 'ingen tilgangskode (ACCESS_CODE)'}${HOPS ? `, brukerens adresse fra X-Forwarded-For (${HOPS} mellomtjener${HOPS > 1 ? 'e' : ''})` : ''}.`);
+});

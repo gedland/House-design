@@ -1,3 +1,5 @@
 .env
 .env.local
 node_modules
+.husform-usage.json
+.husform-usage.json.tmp

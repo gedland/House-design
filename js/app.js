@@ -7,7 +7,7 @@ const btn = (textContent, onclick, p = {}) => h('button', { type: 'button', text
 const clone = o => JSON.parse(JSON.stringify(o));
 const snap = v => Math.round(v * 20) / 20;
 // sel = valgt objekt, floor = etasjen som vises (null = hele huset), sheet = åpent ark, placing = dør/vindu som venter på et trykk på en vegg
-const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, report: null, note: '' };
+const S = { house: clone(DEMO), sel: null, undo: [], pending: null, move: false, floor: null, walk: null, sheet: null, placing: null, photos: [], prep: null, job: null, server: null, access: null, report: null, note: '' };
 let view;
 try { view = createView($('#view')); }
 catch (e) { window.husformFail?.(`Nettleseren fikk ikke startet 3D-grafikk (WebGL): ${e.message}`); throw e; }
@@ -213,6 +213,7 @@ function addSheet() {
 // Bilder inn → 3D-modell. Bildene krympes i nettleseren (lang side 1280 px, JPEG) og sendes til serveren, som spør Claude.
 // S.photos: [{ key, name, data, thumb }]. S.prep: krymping pågår { done, total }. S.job: tolkning pågår { stage, part, chars, t0, xhr }.
 // S.server: 'ok' | 'nokey' | 'none' (ingen Husform-server svarte) | null (ikke sjekket ennå).
+// S.access: vernet på serveren { left (hus igjen i dag), reason, error }. reason: 'code' (spør om tilgangskoden), 'locked', 'quota', 'full' eller null.
 const MIN = 5, MAX = 30, MAX_MB = 40, SIDE = 1280, THUMB = 168, MAX_DATA = 900e3;
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
@@ -265,12 +266,30 @@ async function addPhotos(files) {
   ui();
 }
 function removePhoto(i) { S.photos.splice(i, 1); S.note = ''; ui(); }
+// Tilgangskoden (ACCESS_CODE på serveren) huskes i localStorage, og i minnet hvis localStorage ikke virker.
+let accessCode = (() => { try { return localStorage.husformCode || ''; } catch { return ''; } })();
+function setCode(c) { accessCode = c; try { if (c) localStorage.husformCode = c; else localStorage.removeItem('husformCode'); } catch {} }
+const codeHeader = () => accessCode ? { 'X-Access-Code': encodeURIComponent(accessCode) } : {};
 async function checkServer() {
+  const sent = accessCode;
   try {
-    const r = await fetch('api/status', { cache: 'no-store' }), j = await r.json();
+    const r = await fetch('api/status', { cache: 'no-store', headers: codeHeader() }), j = await r.json();
     S.server = j.ai ? 'ok' : 'nokey';
+    if (j.reason === 'code' && sent && accessCode === sent) setCode(''); // feil kode: spør på nytt
+    S.access = { left: j.left, reason: j.reason || null, error: j.reason === 'code' && !sent ? '' : j.error || '' };
   } catch { S.server = 'none'; }
   if (S.sheet === 'photos') ui();
+}
+function codeForm() {
+  const input = h('input', { type: 'text', value: accessCode, autocomplete: 'off', autocapitalize: 'none', spellcheck: false, required: true, maxLength: 200 });
+  const go = h('button', { type: 'submit', className: 'primary wide', textContent: 'Fortsett' });
+  const form = h('form', { className: 'fields', onsubmit: async e => {
+    e.preventDefault(); const v = input.value.trim(); if (!v) return input.focus();
+    setCode(v); go.disabled = true; go.textContent = 'Sjekker koden …'; await checkServer();
+  } }, h('label', { className: 'wide' }, h('span', { textContent: 'Tilgangskode' }), input), go);
+  setTimeout(() => form.isConnected && !matchMedia('(pointer: coarse)').matches && input.focus());
+  return [h('p', { className: 'hint', textContent: 'Denne Husform-serveren krever en tilgangskode før du laster opp bilder. Du får den av den som delte lenken. Koden huskes på denne enheten.' }),
+    S.access.error && h('p', { className: 'note', role: 'alert', textContent: S.access.error }), form];
 }
 
 // Fremdrift: sending (0–15 %), Claude ser på bildene (15–50 %, etter tid), Claude skriver modellen (50–80 %, etter mengde tekst),
@@ -306,7 +325,7 @@ const jobView = (small) => h('div', { className: 'job' + (small ? ' small' : '')
 
 const failed = msg => Object.assign(new Error(msg), { shown: true });
 function httpError(status, j) {
-  if (j?.error) return failed(j.error);
+  if (j?.error) return Object.assign(failed(j.error), { reason: j.reason });
   if (status === 404 || status === 405) return failed('Fant ikke bildetolkningen på serveren. Appen ser ut til å kjøre uten Husform-serveren (f.eks. som statiske filer). Start den med node server.js.');
   if (status === 413) return failed('Bildene er for store til sammen. Bruk færre bilder.');
   if (status >= 502 && status <= 504) return failed(`Serveren svarte ikke (feil ${status}). Sjekk at node server.js kjører, og prøv igjen.`);
@@ -331,7 +350,8 @@ function post(images) {
         else if (m?.type === 'error') error = m.error;
       }
     };
-    x.open('POST', 'api/analyze'); x.setRequestHeader('Content-Type', 'application/json'); x.timeout = 15 * 60e3;
+    x.open('POST', 'api/analyze'); x.setRequestHeader('Content-Type', 'application/json');
+    for (const [k, v] of Object.entries(codeHeader())) x.setRequestHeader(k, v); x.timeout = 15 * 60e3;
     x.upload.onprogress = e => e.lengthComputable && stage('send', { part: e.loaded / e.total });
     x.upload.onload = () => stage('wait');
     x.onprogress = read;
@@ -361,10 +381,13 @@ async function analyze() {
     try { house = normalize(res.house); } catch (e) { throw failed(`Claude svarte, men modellen kunne ikke brukes: ${e.message} Prøv igjen.`); }
     S.photos = []; S.job = null; replace(house);
     S.report = res.report || { fixed: [], problems: [], guesses: '' }; sheet('report');
+    checkServer(); // antall hus igjen i dag
   } catch (e) {
     S.job = null;
     if (!e.shown && !e.aborted) console.error(e);
-    say(e.aborted ? 'Tolkningen ble avbrutt. Bildene er fortsatt valgt.' : e.shown ? e.message : `Noe gikk galt: ${e.message}`);
+    // Tilgangskode eller grense: arket viser meldingen i stedet for opplastingen. Bildene er fortsatt valgt.
+    if (e.reason) { if (e.reason === 'code') setCode(''); S.access = { ...S.access, left: 0, reason: e.reason, error: e.message }; S.note = ''; ui(); }
+    else { say(e.aborted ? 'Tolkningen ble avbrutt. Bildene er fortsatt valgt.' : e.shown ? e.message : `Noe gikk galt: ${e.message}`); checkServer(); }
   } finally { clearInterval(timer); lock?.release().catch(() => {}); }
 }
 function cancelJob() { S.job?.xhr?.abort(); }
@@ -385,7 +408,7 @@ function photoSheet() {
   const intro = { ok: `Velg ${MIN}–${MAX} bilder av ett hus, både ute og inne: alle sider av huset utenfra, og hvert rom innenfra. Jo flere vinkler, jo bedre modell. Målene blir anslag som du kan rette etterpå.`,
     nokey: 'Serveren har ingen API-nøkkel for Claude, så bildene kan ikke tolkes. Den som driver serveren, må legge ANTHROPIC_API_KEY=... i filen .env og starte node server.js på nytt. Imens kan du prøve appen med demohuset.',
     none: 'Fant ingen Husform-server å sende bildene til. Bildetolkning krever at appen kjøres med node server.js (ikke som statiske filer) og at du er på nett. Imens kan du prøve appen med demohuset.' }[S.server] || 'Sjekker serveren …';
-  const ok = S.server === 'ok';
+  const why = S.server === 'ok' && !busy && S.access?.reason, ok = S.server === 'ok' && !why, left = S.access?.left;
   const status = ok && [
     h('div', { className: 'count' },
       h('strong', { textContent: `${n} av ${MAX} bilder valgt` }),
@@ -398,7 +421,10 @@ function photoSheet() {
   const go = ok && !busy && btn(n < MIN ? `Velg minst ${MIN} bilder (${n} valgt)` : `Lag 3D-modell av ${n} bilder`, analyze, { className: 'primary', disabled: n < MIN || !!prep });
   // Mens tolkningen pågår, står fremdriften øverst så den synes uten å rulle.
   return [head('Nytt hus', 'Fra bilder til 3D', () => sheet(null)),
-    busy ? [jobView(false), btn('Avbryt', cancelJob, { className: 'secondary' })] : h('p', { className: 'hint', textContent: intro }),
+    busy ? [jobView(false), btn('Avbryt', cancelJob, { className: 'secondary' })]
+      : why === 'code' ? codeForm()
+      : why ? h('p', { className: 'note', role: 'status', textContent: S.access.error })
+      : [h('p', { className: 'hint', textContent: intro }), ok && left != null && h('p', { className: 'hint', textContent: `Du kan lage ${left} hus til i dag.` })],
     status, grid, go,
     S.server === 'none' && btn('Prøv å nå serveren igjen', () => { S.server = null; ui(); checkServer(); }, { className: 'secondary' }),
     !ok && S.server && btn('Åpne demohuset', () => replace(clone(DEMO)), { className: 'primary' })].flat();

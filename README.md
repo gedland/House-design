@@ -19,7 +19,14 @@ node server.js
 
 **Uten API-nøkkel** vises demohuset, og alt unntatt bildetolkning virker. Det gjelder også når filene legges rett på en statisk vert som GitHub Pages.
 **Med egne bilder:** lag `.env` med `ANTHROPIC_API_KEY=...` (valgfritt `CLAUDE_MODEL`, `PORT`, `HOST`). Nøkkelen brukes bare på serveren. Hvert hus koster penger hos Anthropic.
-Serveren har ingen innlogging. Legger du den åpent på nettet, kan alle som finner den bruke nøkkelen din.
+
+**Før lenken deles** har `/api/analyze` et vern mot misbruk og kostnader (ingen innlogging, ingen ekstra pakker):
+- Høyst 3 hus per nettverksadresse per døgn (`PER_IP_LIMIT`). IPv6-adresser regnes per /64-blokk.
+- Høyst 20 hus totalt per døgn for alle brukerne til sammen (`DAILY_LIMIT`). `DAILY_LIMIT=0` slår av bildetolkningen.
+- Valgfri tilgangskode: `ACCESS_CODE=...`. Appen spør om koden før opplasting og husker den på enheten. Etter 10 feil koder fra samme adresse stenges den adressen ut døgnet.
+- Døgnet følger norsk tid og nullstilles ved midnatt. Tellingen lagres i `.husform-usage.json` (eller `USAGE_FILE`), så en omstart ikke nullstiller den. Adressene lagres bare som hash.
+- Et hus telles når Claude spørres. Feiler det før Claude begynner å svare, telles det ikke.
+- Bak en mellomtjener (Render, Fly, Railway, nginx, Cloudflare): sett `TRUST_PROXY` til antall mellomtjenere foran serveren, vanligvis `1`. Ellers ser serveren bare mellomtjenerens adresse, og alle deler de samme 3 husene. Uten mellomtjener skal den stå tom, ellers kan grensen omgås.
 
 ## Filer
 - `js/house.js`: JSON-skjemaet (øverst i filen), demohuset, `normalize()` og kontrollen `inspect()`. Serveren bruker samme fil (`js/package.json` gjør den til en ES-modul for Node).
